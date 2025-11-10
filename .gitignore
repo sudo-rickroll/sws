@@ -1,0 +1,8 @@
+# Target
+sws
+
+# Object files
+*.o
+
+# mkdep
+.depend
