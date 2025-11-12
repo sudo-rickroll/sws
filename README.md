@@ -1,6 +1,6 @@
 # Group Project - Simple Web Server
 
-Liam Rust, Dimitri Stamoutsos, Rangasai Khumbashi Raghavendra
+Liam Rust, Dimitri Stamoutsos, Rangasai Kumbhashi Raghavendra
 
 2025-11-12
 
