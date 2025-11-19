@@ -4,11 +4,13 @@
 #include <unistd.h>
 
 #include "types.h"
+#include "logger.h"
 
 int input_validation(int argc, char **argv, sws_options *config) {
 	/* Default assignments */
 	int opt;
-	struct stat st;
+	struct stat *st;
+	(void) st;
 	config->port = 8080;
 
 	while ((opt = getopt(argc, argv, "c:dhi:l:p:")) != -1) {
@@ -55,8 +57,6 @@ int input_validation(int argc, char **argv, sws_options *config) {
 		}
 	}
 
-
-
 	return 0;
 }
 
@@ -64,6 +64,9 @@ int main(int argc, char *argv[]) {
 	sws_options config;
 
 	input_validation(argc, argv, &config);
+	// placeholder path
+	initialize_logging(&config, "./");
+	log_stream();
 
 	return EXIT_SUCCESS;
 }
