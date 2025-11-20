@@ -12,7 +12,7 @@ int input_validation(int argc, char **argv, sws_options *config) {
 	struct stat *st;
 	(void) st;
 	config->port = 8080;
-
+	
 	while ((opt = getopt(argc, argv, "c:dhi:l:p:")) != -1) {
 		switch (opt) {
 			case 'c':
@@ -31,13 +31,17 @@ int input_validation(int argc, char **argv, sws_options *config) {
 				config->log = optarg;
 				break;
 			case 'p':
-				/* There is a default assignment, but -p
-				 * still requires a port
+				/* You have mentioned p: so p will
+				 * have to have an argument 
+				 * mandatorily. So, removing this
 				 */
+				/*
 				if (!optarg) {
 					fprintf(stderr, "Error: -p requires a port value\n");
 					return -1;
 				}
+				*/
+				config->port = atoi(optarg);
 				break;
 			/* Unknown, pass */
 			case '?':
@@ -62,10 +66,18 @@ int input_validation(int argc, char **argv, sws_options *config) {
 
 int main(int argc, char *argv[]) {
 	sws_options config;
+	
+	if(input_validation(argc, argv, &config) < 0){
+		return EXIT_FAILURE;	
+	}
 
-	input_validation(argc, argv, &config);
+	if(config.help){
+		printf("Usage: %s [-dh] [-c dir] [-i address] [-l file] [-p port] dir\n", argv[0]);
+		return EXIT_SUCCESS;
+	}
+
 	/* placeholder path */
-	initialize_logging(&config, "./");
+	initialize_logging(&config, config.log);
 	log_stream();
 
 	return EXIT_SUCCESS;
