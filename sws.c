@@ -64,7 +64,7 @@ int main(int argc, char *argv[]) {
 	sws_options config;
 
 	input_validation(argc, argv, &config);
-	// placeholder path
+	/* placeholder path */
 	initialize_logging(&config, "./");
 	log_stream();
 
