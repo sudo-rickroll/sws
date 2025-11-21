@@ -6,3 +6,6 @@ sws
 
 # mkdep
 .depend
+
+#Temporary Saves
+*.swp

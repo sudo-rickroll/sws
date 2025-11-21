@@ -2,9 +2,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <err.h>
 
 #include "types.h"
 #include "logger.h"
+#include "connections.h"
 
 int input_validation(int argc, char **argv, sws_options *config) {
 	/* Default assignments */
@@ -30,20 +32,14 @@ int input_validation(int argc, char **argv, sws_options *config) {
 			case 'l':
 				config->log = optarg;
 				break;
-			case 'p':
-				/* You have mentioned p: so p will
-				 * have to have an argument 
-				 * mandatorily. So, removing this
-				 */
-				/*
-				if (!optarg) {
-					fprintf(stderr, "Error: -p requires a port value\n");
-					return -1;
-				}
-				*/
-				config->port = atoi(optarg);
-				break;
-			/* Unknown, pass */
+			case 'p': {
+					  int port = atoi(optarg);
+					  if(port < 1 || port > 65535){
+						  err(EXIT_FAILURE, "Invalid port number");
+					  }
+					  config->port = port;
+					  break;
+				  }
 			case '?':
 			default:
 				if (optopt == 'c' || optopt == 'i' || 
@@ -76,9 +72,13 @@ int main(int argc, char *argv[]) {
 		return EXIT_SUCCESS;
 	}
 
-	/* placeholder path */
 	initialize_logging(&config, config.log);
 	log_stream();
+
+	if(create_connections(config.address, config.port) < 0){
+		err(EXIT_FAILURE, "Unable to establish a connection");
+	}
+	
 
 	return EXIT_SUCCESS;
 }
