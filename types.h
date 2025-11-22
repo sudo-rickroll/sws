@@ -11,6 +11,7 @@ typedef struct {
 	bool help;
 	char *address;
 	char *log;
+	/* Port number will be between 1 and 65535 */
 	uint16_t port;
 	char *docroot;
 } sws_options;

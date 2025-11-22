@@ -32,6 +32,8 @@ int input_validation(int argc, char **argv, sws_options *config) {
 			case 'l':
 				config->log = optarg;
 				break;
+
+			/* Enforcing port boundaries */
 			case 'p': {
 					  int port = atoi(optarg);
 					  if(port < 1 || port > 65535){
