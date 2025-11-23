@@ -3,13 +3,23 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include <sys/stat.h>
+
 #include "types.h"
 
 int input_validation(int argc, char **argv, sws_options *config) {
 	/* Default assignments */
 	int opt;
 	struct stat st;
+	char *end;
+
 	config->port = 8080;
+	config->debug = false;
+	config->help = false;
+	config->address = NULL;
+	config->log = NULL;
+	config->docroot = NULL;
+	config->cgi = NULL;
 
 	while ((opt = getopt(argc, argv, "c:dhi:l:p:")) != -1) {
 		switch (opt) {
@@ -36,6 +46,14 @@ int input_validation(int argc, char **argv, sws_options *config) {
 					fprintf(stderr, "Error: -p requires a port value\n");
 					return -1;
 				}
+
+				config->port = strtol(optarg, &end, 10);
+
+				if (*end != '\0' || config->port < 1 || config->port > 65535) {
+					fprintf(stderr, "Error: invalid port '%s'\n", optarg);
+					return -1;
+				}
+
 				break;
 			/* Unknown, pass */
 			case '?':
@@ -56,7 +74,18 @@ int input_validation(int argc, char **argv, sws_options *config) {
 		}
 	}
 
+	config->docroot = argv[optind];
 
+	/* Check docroot */
+	if (stat(config->docroot, &st) != 0) {
+		fprintf(stderr, "Error: cannot access '%s'\n", config->docroot);
+		perror("stat");
+		return -1;
+	}
+	if (!S_ISDIR(st.st_mode)) {
+		fprintf(stderr, "Error: '%s' is not dir\n", config->docroot);
+		return -1;
+	}
 
 	return 0;
 }
