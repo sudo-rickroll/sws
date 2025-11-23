@@ -56,7 +56,7 @@ create_connections(char *address, uint16_t port){
 		 * Otherwise, it'll be in TIME_WAIT.
 		 */
 		sockopt = ENABLE_OPTION;
-		if((sock > 0) && (sock = setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &sockopt, sizeof(sockopt))) < 0){
+		if(setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &sockopt, sizeof(sockopt)) < 0){
 			perror("setsockopt SO_REUSEADDR");
 			(void)close(sock);
 			continue;
@@ -68,22 +68,22 @@ create_connections(char *address, uint16_t port){
 		 * lecture. With this, IPv6 accepts both
 		 * v4 and v6
 		 */
-		if(sock > 0 && current->ai_family == AF_INET6){
+		if(current->ai_family == AF_INET6){
 			sockopt = DISABLE_OPTION;
-			if((sock = setsockopt(sock, IPPROTO_IPV6, IPV6_V6ONLY, &sockopt, sizeof(sockopt))) < 0){
+			if(setsockopt(sock, IPPROTO_IPV6, IPV6_V6ONLY, &sockopt, sizeof(sockopt)) < 0){
 				perror("setsockopt IPV6_V6ONLY");
 				(void)close(sock);
 				continue;
 			}
 		}
 
-		if((sock > 0) && (sock = bind(sock, current->ai_addr, current->ai_addrlen)) < 0){
+		if(bind(sock, current->ai_addr, current->ai_addrlen) < 0){
 			perror("bind");
 			(void)close(sock);
 			continue;
 		}
 
-		if((sock > 0) && (sock = listen(sock, BACKLOG)) < 0){
+		if(listen(sock, BACKLOG) < 0){
 			perror("listen");
 			(void)close(sock);
 			continue;
