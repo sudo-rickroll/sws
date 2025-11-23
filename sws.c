@@ -40,6 +40,7 @@ int input_validation(int argc, char **argv, sws_options *config) {
 			/* Unknown, pass */
 			case '?':
 			default:
+				/* Cases with arguments */
 				if (optopt == 'c' || optopt == 'i' || 
 					optopt == 'l' || optopt == 'p') {
 					fprintf(stderr, "Error: -%c requires an argument\n", optopt);
