@@ -95,7 +95,8 @@ int input_validation(int argc, char **argv, sws_options *config) {
 
 int main(int argc, char *argv[]) {
 	sws_options config;
-	
+	int sock;
+
 	if(input_validation(argc, argv, &config) < 0){
 		return EXIT_FAILURE;	
 	}
@@ -105,12 +106,18 @@ int main(int argc, char *argv[]) {
 		return EXIT_SUCCESS;
 	}
 
-	initialize_logging(&config, config.log);
-	log_stream();
+	/* To be replaced by openlog() and syslog()
+	 * initialize_logging(&config, config.log);
+	 * log_stream();
+	 */
 
-	if(create_connections(config.address, config.port) < 0){
+	if((sock = create_connections(config.address, config.port)) < 0){
 		err(EXIT_FAILURE, "Unable to establish a connection");
 	}
+
+	accept_connections(sock);
+
+	(void)close(sock);
 	
 	return EXIT_SUCCESS;
 }

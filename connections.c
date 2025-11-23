@@ -97,4 +97,59 @@ create_connections(char *address, uint16_t port){
 	return sock;
 }
 
+static void
+display_client_details(struct sockaddr_storage *address, socklen_t length){
+	char hbuf[NI_MAXHOST];
+
+	if(getnameinfo((struct sockaddr *)address, length, hbuf, sizeof(hbuf), NULL, 0, NI_NUMERICHOST)){
+		errx(EXIT_FAILURE, "getnameinfo: Unable to get numeric hostname");
+	}
+
+	(void)printf("Connection request has arrived from: %s\n", hbuf);
+}
+
+static void
+handle_connections(int sock){
+	int rval;
+	do{
+		char buf[BUFSIZ];
+		bzero(buf, sizeof(buf));
+
+		if((rval = read(sock, buf, BUFSIZ)) < 0){
+			perror("Stream read error");
+		}
+
+		if(rval == 0){
+			(void)printf("Ending connection\n");
+		}
+		else{
+			(void)printf("Client sent \n%s\n", buf);
+		}
+	} while(rval != 0);
+}
+
+void
+accept_connections(int sock){
+	struct sockaddr_storage address;
+	int fd;
+	socklen_t length;
+
+	(void)printf("Server is open for connections!!!! \n");
+
+	for(;;){
+		length = sizeof(address);
+		if((fd = accept(sock, (struct sockaddr *)&address, &length)) < 0){
+			perror("accept");
+			continue;
+		}
+
+		display_client_details(&address, length);
+		handle_connections(fd);
+
+		(void)close(fd);
+		(void)printf("Closing connection...\n\n");
+	}
+}
+
+
 

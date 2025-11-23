@@ -8,4 +8,7 @@
 int
 create_connections(char *address, uint16_t port);
 
+void
+accept_connections(int sock);
+
 #endif
