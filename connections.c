@@ -22,12 +22,13 @@
 #define DEFAULT_PORT "8080"
 #define ENABLE_OPTION 1
 #define DISABLE_OPTION 0
+#define PORT_NUMBER_MAX 6
 
 int
 create_connections(char *address, uint16_t port){
 	int sock, sockopt;
 	struct addrinfo server, *next, *current;
-	char port_cast[6];
+	char port_cast[PORT_NUMBER_MAX];
 
 	snprintf(port_cast, sizeof(port_cast), "%hu", port);
 
@@ -55,7 +56,7 @@ create_connections(char *address, uint16_t port){
 		 * Otherwise, it'll be in TIME_WAIT.
 		 */
 		sockopt = ENABLE_OPTION;
-		if((sock = setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &sockopt, sizeof(sockopt))) < 0){
+		if((sock > 0) && (sock = setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &sockopt, sizeof(sockopt))) < 0){
 			perror("setsockopt SO_REUSEADDR");
 			(void)close(sock);
 			continue;
@@ -67,7 +68,7 @@ create_connections(char *address, uint16_t port){
 		 * lecture. With this, IPv6 accepts both
 		 * v4 and v6
 		 */
-		if(current->ai_family == AF_INET6){
+		if(sock > 0 && current->ai_family == AF_INET6){
 			sockopt = DISABLE_OPTION;
 			if((sock = setsockopt(sock, IPPROTO_IPV6, IPV6_V6ONLY, &sockopt, sizeof(sockopt))) < 0){
 				perror("setsockopt IPV6_V6ONLY");
@@ -76,13 +77,13 @@ create_connections(char *address, uint16_t port){
 			}
 		}
 
-		if((sock = bind(sock, current->ai_addr, current->ai_addrlen)) < 0){
+		if((sock > 0) && (sock = bind(sock, current->ai_addr, current->ai_addrlen)) < 0){
 			perror("bind");
 			(void)close(sock);
 			continue;
 		}
 
-		if((sock = listen(sock, BACKLOG)) < 0){
+		if((sock > 0) && (sock = listen(sock, BACKLOG)) < 0){
 			perror("listen");
 			(void)close(sock);
 			continue;
