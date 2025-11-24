@@ -4,11 +4,11 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/time.h>
-#include <sys/wait.h>
 
 #include <netinet/in.h>
 
 #include <err.h>
+#include <errno.h>
 #include <limits.h>
 #include <magic.h>
 #include <netdb.h>
@@ -17,9 +17,11 @@
 #include <stdint.h>
 #include <string.h>
 #include <unistd.h>
+#include <signal.h>
 
 #include "types.h"
 #include "connections.h"
+#include "handlers.h"
 
 #define BACKLOG 10
 #define DEFAULT_PORT "8080"
@@ -239,21 +241,37 @@ accept_connections(int sock, char *docroot){
 	struct sockaddr_storage address;
 	int fd;
 	socklen_t length;
+	pid_t pid;
+
+	if(signal(SIGCHLD, reap_connection) == SIG_ERR){
+		perror("signal handler");
+	}
+
 
 	(void)printf("Server is open for connections!!!! \n");
 
 	for(;;){
 		length = sizeof(address);
 		if((fd = accept(sock, (struct sockaddr *)&address, &length)) < 0){
-			perror("accept");
+			(errno == EINTR) ? perror("signal") : perror("accept");
 			continue;
 		}
 
 		display_client_details(&address, length);
-		handle_connections(fd, docroot);
 
-		(void)close(fd);
-		(void)printf("Closing connection...\n\n");
+		if((pid = fork()) < 0){
+			perror("fork");
+			continue;
+		}
+
+
+		if(pid == 0){
+			(void)close(sock);
+			handle_connections(fd, docroot);
+			(void)printf("Closing connection...\n\n");
+			(void)close(fd);
+		}
+		
 	}
 }
 
