@@ -3,13 +3,16 @@
 #ifndef TYPES_H
 #define TYPES_H
 
+#include <stdint.h>
+
 typedef struct {
 	char *cgi;
 	bool debug;
 	bool help;
 	char *address;
 	char *log;
-	unsigned port;
+	/* Port number will be between 1 and 65535 */
+	uint16_t port;
 	char *docroot;
 } sws_options;
 

@@ -1,6 +1,6 @@
 CFLAGS = -ansi -g -Wall -Werror -Wextra -Wformat=2 -Wjump-misses-init -Wlogical-op -Wpedantic -Wshadow
 TARGET_NAME = sws
-OBJECT_FILES = sws.o
+OBJECT_FILES = sws.o logger.o connections.o
 
 all: ${TARGET_NAME}
 
