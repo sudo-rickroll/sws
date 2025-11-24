@@ -270,7 +270,10 @@ accept_connections(int sock, char *docroot){
 			handle_connections(fd, docroot);
 			(void)printf("Closing connection...\n\n");
 			(void)close(fd);
+			exit(EXIT_SUCCESS);
 		}
+
+		(void)close(fd);
 		
 	}
 }
