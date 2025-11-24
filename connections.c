@@ -114,13 +114,13 @@ create_connections(char *address, uint16_t port){
 
 static void
 display_client_details(struct sockaddr_storage *address, socklen_t length){
-	char hbuf[NI_MAXHOST];
+	char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
 
-	if(getnameinfo((struct sockaddr *)address, length, hbuf, sizeof(hbuf), NULL, 0, NI_NUMERICHOST)){
+	if(getnameinfo((struct sockaddr *)address, length, hbuf, sizeof(hbuf), sbuf, sizeof(sbuf), NI_NUMERICHOST)){
 		errx(EXIT_FAILURE, "getnameinfo: Unable to get numeric hostname");
 	}
 
-	(void)printf("Connection request has arrived from: %s\n", hbuf);
+	(void)printf("Connection request has arrived from: %s:%s\n", hbuf, sbuf);
 }
 
 static void
