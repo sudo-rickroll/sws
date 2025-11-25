@@ -1,5 +1,6 @@
 #include <arpa/inet.h>
 
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/time.h>
@@ -8,12 +9,13 @@
 #include <netinet/in.h>
 
 #include <err.h>
+#include <limits.h>
 #include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include <unistd.h>
-#include <stdint.h>
 
 #include "types.h"
 #include "connections.h"
@@ -109,27 +111,89 @@ display_client_details(struct sockaddr_storage *address, socklen_t length){
 }
 
 static void
-handle_connections(int sock){
+handle_connections(int sock, char *docroot){
 	int rval;
 	do{
 		char buf[BUFSIZ];
+		char filepath[PATH_MAX];
+		char version[BUFSIZ], request[BUFSIZ], path[PATH_MAX];
+		struct stat st;
 		bzero(buf, sizeof(buf));
 
 		if((rval = read(sock, buf, BUFSIZ)) < 0){
 			perror("Stream read error");
+			break;
 		}
 
 		if(rval == 0){
 			(void)printf("Ending connection\n");
+			break;
 		}
-		else{
-			(void)printf("Client sent \n%s\n", buf);
+
+		buf[rval] = '\0';
+		(void)printf("Client sent \n%s\n", buf);
+
+		/* Validate parts of request */
+
+		if (sscanf(buf, "%15s %4095s %15s", request, path, version) != 3) {
+			perror("sscanf");
+			break;
 		}
+
+		if (strcmp(request, "GET") != 0 && strcmp(request, "HEAD") != 0) {
+			perror("request");
+			break;
+		}
+
+		if (strcmp(version, "HTTP/1.0") != 0 && strcmp(version, "HTTP/1.1") != 0) {
+			perror("version");
+			break;
+		}
+
+		/* Traversal prevent */
+		if (strstr(path, "..")) {
+			perror("traversal");
+			break;
+		}
+		
+		/* At this point it is a good request. Can serve */
+		
+		snprintf(filepath, sizeof(filepath), "%s/%s", docroot, path + 1);
+
+		if (stat(filepath, &st) != 0 || !S_ISREG(st.st_mode)) {
+			perror("stat");
+			break;
+		}
+
+		/* Print request details */
+		dprintf(sock, "%s 200 OK\r\n", version);
+		/* TODO: Date, Server, Last-Modified, Content-Type (use magic) */
+		dprintf(sock, "Content-Length: %ld\r\n", st.st_size);
+		dprintf(sock, "\r\n");
+
+		/* Serve file if GET */
+		if (strcmp(request, "GET") == 0) {
+			char filebuf[BUFSIZ];
+			size_t n;
+
+			FILE *fp = fopen(filepath, "r");
+			if (fp == NULL) {
+				dprintf(sock, "%s 500 Internal Server Error\r\n\r\n", version);
+				break;
+			}
+
+			while ((n = fread(filebuf, 1, sizeof(filebuf), fp)) > 0) {
+				write(sock, filebuf, n);
+			}
+
+			fclose(fp);
+		}		
+
 	} while(rval != 0);
 }
 
 void
-accept_connections(int sock){
+accept_connections(int sock, char *docroot){
 	struct sockaddr_storage address;
 	int fd;
 	socklen_t length;
@@ -144,7 +208,7 @@ accept_connections(int sock){
 		}
 
 		display_client_details(&address, length);
-		handle_connections(fd);
+		handle_connections(fd, docroot);
 
 		(void)close(fd);
 		(void)printf("Closing connection...\n\n");
