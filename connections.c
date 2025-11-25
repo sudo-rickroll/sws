@@ -10,6 +10,7 @@
 
 #include <err.h>
 #include <limits.h>
+#include <magic.h>
 #include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,6 +26,18 @@
 #define ENABLE_OPTION 1
 #define DISABLE_OPTION 0
 #define PORT_NUMBER_MAX 6
+
+char *http_date_display(time_t t) {
+	static char buf[BUFSIZ];
+	struct tm tm;
+
+	gmtime_r(&t, &tm);
+
+	/* RFC1945 format */
+	strftime(buf, sizeof(buf), "%a, %d %b %Y %H:%M:%S GMT", &tm);
+
+	return buf;
+}
 
 int
 create_connections(char *address, uint16_t port){
@@ -116,8 +129,25 @@ handle_connections(int sock, char *docroot){
 	do{
 		char buf[BUFSIZ];
 		char filepath[PATH_MAX];
-		char version[BUFSIZ], request[BUFSIZ], path[PATH_MAX];
+		/* Choose 16 because neither version nor request can
+		 * possibly be over this amount */
+		char version[16], request[16], path[PATH_MAX];
 		struct stat st;
+		const char *mime_type;
+
+		/* Magic! */
+		magic_t magic_cookie = magic_open(MAGIC_MIME_TYPE);
+		if (magic_cookie == NULL) {
+			perror("magic");
+			break;
+		}
+		if (magic_load(magic_cookie, NULL) != 0) {
+			perror("magic");
+			magic_close(magic_cookie);
+			break;
+		}
+
+
 		bzero(buf, sizeof(buf));
 
 		if((rval = read(sock, buf, BUFSIZ)) < 0){
@@ -134,7 +164,7 @@ handle_connections(int sock, char *docroot){
 		(void)printf("Client sent \n%s\n", buf);
 
 		/* Validate parts of request */
-
+		/* sscanf does not allow * sizes so I explicitly write them out for it */
 		if (sscanf(buf, "%15s %4095s %15s", request, path, version) != 3) {
 			perror("sscanf");
 			break;
@@ -165,9 +195,19 @@ handle_connections(int sock, char *docroot){
 			break;
 		}
 
+		/* More magic! */
+		mime_type = magic_file(magic_cookie, filepath);
+		if (mime_type == NULL) {
+			perror("magic");
+			break;
+		}
+
 		/* Print request details */
 		dprintf(sock, "%s 200 OK\r\n", version);
-		/* TODO: Date, Server, Last-Modified, Content-Type (use magic) */
+		dprintf(sock, "Date: %s\r\n", http_date_display(time(NULL)));
+		dprintf(sock, "Server: sws/1.0\r\n");
+		dprintf(sock, "Last-Modified: %s\r\n", http_date_display(st.st_mtime));
+		dprintf(sock, "Content-Type: %s\r\n", mime_type);
 		dprintf(sock, "Content-Length: %ld\r\n", st.st_size);
 		dprintf(sock, "\r\n");
 
