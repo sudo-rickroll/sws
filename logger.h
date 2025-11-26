@@ -1,12 +1,15 @@
 #ifndef LOGGER_H
 #define LOGGER_H
 
-#include "types.h"
+#include <sys/types.h>
 
 void
-initialize_logging(sws_options *config, char*path);
+initialize_logging(char *, int);
 
 void
-log_stream();
+log_stream(char *, char *, int, size_t);
+
+void 
+end_logging()
 
 #endif
