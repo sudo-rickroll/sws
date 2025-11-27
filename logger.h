@@ -4,12 +4,12 @@
 #include <sys/types.h>
 
 void
-initialize_logging(char *, int);
+initialize_logging(const char *, int);
 
 void
-log_stream(char *, char *, int, size_t);
+log_stream(const char *, const char *, int, size_t);
 
 void 
-end_logging()
+end_logging();
 
 #endif

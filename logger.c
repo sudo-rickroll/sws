@@ -4,42 +4,43 @@
 #include <time.h>
 #include <fcntl.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "logger.h"
 
-int route;
-int enable_default; 
+static int ROUTE;
+static int ENABLE_DEFAULT; 
 
 void
-initialize_logging(char *path, int debug){
+initialize_logging(const char *path, int debug){
 
-	route = -1, enable_default = 0;
+	ROUTE = -1, ENABLE_DEFAULT = 0;
 
 	if(debug){
-		route = STDOUT_FILENO;
-		enable_default = 1;
+		ROUTE = STDOUT_FILENO;
+		ENABLE_DEFAULT = 1;
 		return;
 	}
 	else if(path != NULL){
-		if((route = open(path, O_WRONLY | O_CREAT | O_APPEND, 0644)) < 0){
+		if((ROUTE = open(path, O_WRONLY | O_CREAT | O_APPEND, 0644)) < 0){
 			err(EXIT_FAILURE, "Unable to open log file: %s", path);
 		}		
 	}
 	else{
-		route = -1;
+		ROUTE = -1;
 	}
 
-	enable_default = 0;
+	ENABLE_DEFAULT = 0;
 }
 
 void
-log_stream(char *address, char *request, int status, size_t bytes){
+log_stream(const char *address, const char *request, int status, size_t bytes){
 	time_t now;
 	struct tm *utc;
 	char timeBuf[64];
 	int len;
 
-	if(route < 0){
+	if(ROUTE < 0){
 		return;
 	}
 
@@ -59,19 +60,19 @@ log_stream(char *address, char *request, int status, size_t bytes){
 	do{
 		char buf[BUFSIZ];
 		memset(buf, 0, sizeof(buf));
-		if((len = snprintf(buf, sizeof(buf), "%s %s \"%s\" %d %zu\n", address, timeBuf, request, status, bytes)) < 0){
+		if((len = snprintf(buf, sizeof(buf), "%s %s \"%s\" %d %lu\n", address, timeBuf, request, status, (unsigned long)bytes)) < 0){
 			perror("snprintf");
 			exit(EXIT_FAILURE);
 		}
 
-		if(write(route, buf, len) < 0){
+		if(write(ROUTE, buf, len) < 0){
 			perror("write");
 			exit(EXIT_FAILURE);
 		}
 
 	} while(len != 0);
 
-	if(write(route, "\n", 2) < 0){
+	if(write(ROUTE, "\n", 2) < 0){
 		perror("write");
 		exit(EXIT_FAILURE);
 	}
@@ -80,8 +81,8 @@ log_stream(char *address, char *request, int status, size_t bytes){
 
 void 
 end_logging(){
-	if(route >= 0 && !enable_default){
-		(void)close(route);
-		route = -1;
+	if(ROUTE >= 0 && !ENABLE_DEFAULT){
+		(void)close(ROUTE);
+		ROUTE = -1;
 	}
 }
