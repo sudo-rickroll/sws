@@ -4,35 +4,85 @@
 #include <time.h>
 #include <fcntl.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "logger.h"
 
-static int LOG_FD = -1;
+static int ROUTE;
+static int ENABLE_DEFAULT; 
 
 void
-initialize_logging(sws_options *config, char *path){
-	if(config->debug){
-		LOG_FD = STDOUT_FILENO;
+initialize_logging(const char *path, int debug){
+
+	ROUTE = -1, ENABLE_DEFAULT = 0;
+
+	if(debug){
+		ROUTE = STDOUT_FILENO;
+		ENABLE_DEFAULT = 1;
+		return;
 	}
 	else if(path != NULL){
-		if((LOG_FD = open(path, O_WRONLY | O_CREAT | O_APPEND, 0644)) < 0){
-			err(EXIT_FAILURE, "Unable to open log file");
-		}
+		if((ROUTE = open(path, O_WRONLY | O_CREAT | O_APPEND, 0644)) < 0){
+			err(EXIT_FAILURE, "Unable to open log file: %s", path);
+		}		
 	}
 	else{
-		LOG_FD = -1;
+		ROUTE = -1;
 	}
+
+	ENABLE_DEFAULT = 0;
 }
 
 void
-log_stream(){
-	time_t now = time(NULL);
-	char buf[BUFSIZ];
+log_stream(const char *address, const char *request, int status, size_t bytes){
+	time_t now;
+	struct tm *utc;
+	char timeBuf[64];
+	int len;
 
-	int str_len = snprintf(buf, sizeof(buf), "<ip> %lu <req> <status> <res>", now);
-	
-	if(write(LOG_FD, buf, str_len) < 0){
-		err(EXIT_FAILURE, "Unable to write to log");
+	if(ROUTE < 0){
+		return;
 	}
-}	
 
+	if((now = time(NULL)) <= 127){
+		err(EXIT_FAILURE, "Error getting current time");
+	}
+
+	if((utc = gmtime(&now)) == NULL){
+			err(EXIT_FAILURE, "Error converting to UTC");
+	}
+
+	if(strftime(timeBuf, sizeof(timeBuf), "%Y-%m-%dT%H:%M:%SZ", utc) == 0){
+		perror("strftime");
+		exit(EXIT_FAILURE);
+	}
+	
+	do{
+		char buf[BUFSIZ];
+		memset(buf, 0, sizeof(buf));
+		if((len = snprintf(buf, sizeof(buf), "%s %s \"%s\" %d %lu\n", address, timeBuf, request, status, (unsigned long)bytes)) < 0){
+			perror("snprintf");
+			exit(EXIT_FAILURE);
+		}
+
+		if(write(ROUTE, buf, len) < 0){
+			perror("write");
+			exit(EXIT_FAILURE);
+		}
+
+	} while(len != 0);
+
+	if(write(ROUTE, "\n", 2) < 0){
+		perror("write");
+		exit(EXIT_FAILURE);
+	}
+}
+
+
+void 
+end_logging(){
+	if(ROUTE >= 0 && !ENABLE_DEFAULT){
+		(void)close(ROUTE);
+		ROUTE = -1;
+	}
+}
