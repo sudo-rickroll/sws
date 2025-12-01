@@ -134,6 +134,7 @@ handle_connections(int sock, char *docroot){
 		/* Choose 16 because neither version nor request can
 		 * possibly be over this amount */
 		char version[16], request[16], path[PATH_MAX];
+		char canonic[PATH_MAX];
 		struct stat st;
 		const char *mime_type;
 
@@ -179,12 +180,6 @@ handle_connections(int sock, char *docroot){
 				perror("version");
 				break;
 			}
-
-			/* Traversal prevent */
-			if (strstr(path, "..")) {
-				perror("traversal");
-				break;
-			}
 			
 			/* At this point it is a good request. Can serve */
 			
@@ -193,13 +188,24 @@ handle_connections(int sock, char *docroot){
 				break;
 			}
 
-			if (stat(filepath, &st) != 0 || !S_ISREG(st.st_mode)) {
+			if (!realpath(filepath, canonic)) {
+				perror("realpath");
+				break;
+			}
+
+			/* Traversal prevent by checking for docroot prefix */
+			if (strncmp(canonic, docroot, strlen(docroot)) != 0) {
+				perror("escape");
+				break;
+			}
+
+			if (stat(canonic, &st) != 0 || !S_ISREG(st.st_mode)) {
 				perror("stat");
 				break;
 			}
 
 			/* More magic! */
-			mime_type = magic_file(magic_cookie, filepath);
+			mime_type = magic_file(magic_cookie, canonic);
 			if (mime_type == NULL) {
 				perror("magic");
 				break;
