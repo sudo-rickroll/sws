@@ -194,7 +194,7 @@ handle_connections(int sock, char *docroot){
 			}
 
 			/* Traversal prevent by checking for docroot prefix */
-			if (strncmp(canonic, docroot, strlen(docroot)) != 0) {
+			if (strncmp(canonic, docroot, strlen(docroot)) == 0) {
 				perror("escape");
 				break;
 			}
