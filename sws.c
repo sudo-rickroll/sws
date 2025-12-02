@@ -13,6 +13,7 @@
 int input_validation(int argc, char **argv, sws_options *config) {
 	/* Default assignments */
 	int opt;
+	long user_port;
 	struct stat st;
 	char *end;	
 
@@ -50,12 +51,12 @@ int input_validation(int argc, char **argv, sws_options *config) {
 					return -1;
 				}
 
-				config->port = strtol(optarg, &end, 10);
-
-				if (*end != '\0') {
+				user_port = strtol(optarg, &end, 10);
+				if (*end != '\0' || user_port < 0 || user_port > 65535) {
 					fprintf(stderr, "Error: invalid port '%s'\n", optarg);
 					return -1;
 				}
+				config->port = user_port;
 
 				break;
 			/* Unknown, pass */

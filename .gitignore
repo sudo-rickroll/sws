@@ -9,3 +9,8 @@ sws
 
 #Temporary Saves
 *.swp
+
+# CLion garb
+.idea
+CMake*
+cmake*
