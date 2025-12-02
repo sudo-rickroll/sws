@@ -105,6 +105,17 @@ create_connections(char *address, uint16_t port){
 			(void)close(sock);
 			continue;
 		}
+		else{
+			struct sockaddr_storage server_address;
+			socklen_t length;
+			char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
+
+			length = sizeof(server_address);
+
+			if(getsockname(sock, (struct sockaddr *)&server_address, &length) == 0 && getnameinfo((struct sockaddr *)&server_address, length, hbuf, sizeof(hbuf), sbuf, sizeof(sbuf), NI_NUMERICHOST | NI_NUMERICSERV) == 0){
+				(void)printf("Server listening on address %s and port %s\n", hbuf, sbuf);
+			}
+		}
 
 		break;
 	}
@@ -115,18 +126,18 @@ create_connections(char *address, uint16_t port){
 }
 
 static void
-display_client_details(struct sockaddr_storage *address, socklen_t length){
-	char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
+display_client_details(struct sockaddr_storage *address, socklen_t length, char *ip, size_t ip_len){
 
-	if(getnameinfo((struct sockaddr *)address, length, hbuf, sizeof(hbuf), sbuf, sizeof(sbuf), NI_NUMERICHOST)){
-		errx(EXIT_FAILURE, "getnameinfo: Unable to get numeric hostname");
+	if(getnameinfo((struct sockaddr *)address, length, ip, ip_len, NULL, 0, NI_NUMERICHOST)){
+		(void)snprintf(ip, sizeof(ip), "Unknown");
+		return;
 	}
 
-	(void)printf("Connection request has arrived from: %s:%s\n", hbuf, sbuf);
+	(void)printf("Connection request has arrived from: %s\n", ip);
 }
 
 static void
-handle_connections(int sock, char *docroot){
+handle_connections(int sock, char *docroot, char *ip){
 	int rval;
 	do{
 		char buf[BUFSIZ];
@@ -160,12 +171,11 @@ handle_connections(int sock, char *docroot){
 		}
 
 		if(rval == 0){
-			(void)printf("Ending connection\n");
 			break;
 		}
 
 		buf[rval] = '\0';
-		(void)printf("Client sent \n%s\n", buf);
+		(void)printf("Client from %s sent \n%s\n", ip, buf);
 
 		/* Validate parts of request */
 		/* sscanf does not allow * sizes so I explicitly write them out for it */
@@ -245,6 +255,7 @@ handle_connections(int sock, char *docroot){
 void
 accept_connections(int sock, char *docroot){
 	struct sockaddr_storage address;
+	char client_ip[NI_MAXHOST];
 	int fd;
 	socklen_t length;
 	pid_t pid;
@@ -253,9 +264,6 @@ accept_connections(int sock, char *docroot){
 		perror("signal handler");
 	}
 
-
-	(void)printf("Server is open for connections!!!! \n");
-
 	for(;;){
 		length = sizeof(address);
 		if((fd = accept(sock, (struct sockaddr *)&address, &length)) < 0){
@@ -263,7 +271,7 @@ accept_connections(int sock, char *docroot){
 			continue;
 		}
 
-		display_client_details(&address, length);
+		display_client_details(&address, length, client_ip, sizeof(client_ip));
 
 		if((pid = fork()) < 0){
 			perror("fork");
@@ -273,8 +281,8 @@ accept_connections(int sock, char *docroot){
 
 		if(pid == 0){
 			(void)close(sock);
-			handle_connections(fd, docroot);
-			(void)printf("Closing connection...\n\n");
+			handle_connections(fd, docroot, client_ip);
+			(void)printf("Client %s has closed connection...\n\n", client_ip);
 			(void)close(fd);
 			exit(EXIT_SUCCESS);
 		}
