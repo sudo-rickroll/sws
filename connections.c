@@ -215,12 +215,12 @@ handle_connections(int sock, char *docroot){
 		}
 
 		if (strcmp(version, "HTTP/1.0") != 0 && strcmp(version, "HTTP/1.1") != 0) {
-			status_print(sock, "HTTP/1.0", 505, "HTTP Version Not Supported", NULL, NULL);
+			perror("strcmp");
 			break;
 		}
 		
 		if (strcmp(request, "GET") != 0 && strcmp(request, "HEAD") != 0) {
-			status_print(sock, version, 405, "Method Not Allowed", NULL, NULL);
+			perror("strcmp");
 			break;
 		}
 
@@ -233,7 +233,7 @@ handle_connections(int sock, char *docroot){
 		}
 
 		if ((size_t)filepath_len >= sizeof(filepath)) {
-			status_print(sock, version, 414, "URI Too Long", NULL, NULL);
+			perror("url size");
 			break;
 		}
 
