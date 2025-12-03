@@ -35,6 +35,13 @@ int is_http(const char *buf) {
 		return 0;
 	}
 
+	/* Check must be for \r\n at the end, not the first occurence */
+	char *cr = strchr(buf, "\r");
+	char *nl = strchr(buf, "\n");
+	if(!cr || !nl || cr != buf + strlen(buf) - 2 || nl != buf + strlen(buf) - 1) {
+		return 0;
+	}
+
 	/* Is HTTP */
 	if ((strncmp(buf, "GET ", 4) == 0 || strncmp(buf, "HEAD ", 5) == 0)
 		&& (strstr(buf, "HTTP/1.0") || strstr(buf, "HTTP/1.1"))) {
