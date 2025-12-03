@@ -128,27 +128,30 @@ display_client_details(struct sockaddr_storage *address, socklen_t length){
 static void
 handle_connections(int sock, char *docroot){
 	int rval;
+
+	char buf[BUFSIZ];
+	char filepath[PATH_MAX];
+	/* Choose 16 because neither version nor request can
+	 * possibly be over this amount */
+	char version[16], request[16], path[PATH_MAX];
+	char canonic[PATH_MAX];
+
+	/* Magic! */
+	magic_t magic_cookie = magic_open(MAGIC_MIME_TYPE);
+	if (magic_cookie == NULL) {
+		perror("magic");
+		return;
+	}
+	if (magic_load(magic_cookie, NULL) != 0) {
+		perror("magic");
+		magic_close(magic_cookie);
+		return;
+	}
+
 	do{
-		char buf[BUFSIZ];
-		char filepath[PATH_MAX];
-		/* Choose 16 because neither version nor request can
-		 * possibly be over this amount */
-		char version[16], request[16], path[PATH_MAX];
-		char canonic[PATH_MAX];
 		struct stat st;
 		const char *mime_type;
 
-		/* Magic! */
-		magic_t magic_cookie = magic_open(MAGIC_MIME_TYPE);
-		if (magic_cookie == NULL) {
-			perror("magic");
-			break;
-		}
-		if (magic_load(magic_cookie, NULL) != 0) {
-			perror("magic");
-			magic_close(magic_cookie);
-			break;
-		}
 
 
 		bzero(buf, sizeof(buf));
@@ -240,6 +243,9 @@ handle_connections(int sock, char *docroot){
 		}
 
 	} while(rval != 0);
+
+	/* Cleanup */
+	magic_close(magic_cookie);
 }
 
 void
