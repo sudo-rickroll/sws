@@ -29,6 +29,21 @@
 #define DISABLE_OPTION 0
 #define PORT_NUMBER_MAX 6
 
+int is_http(const char *buf) {
+	/* Check for \r\n. If not, not HTTP */
+	if (!strstr(buf, "\r\n")) {
+		return 0;
+	}
+
+	/* Is HTTP */
+	if ((strncmp(buf, "GET ", 4) == 0 || strncmp(buf, "HEAD ", 5) == 0)
+		&& (strstr(buf, "HTTP/1.0") || strstr(buf, "HTTP/1.1"))) {
+		return 1;
+	}
+
+	return 0;
+}
+
 char *http_date_display(time_t t) {
 	static char buf[BUFSIZ];
 	struct tm tm;
@@ -39,6 +54,17 @@ char *http_date_display(time_t t) {
 	strftime(buf, sizeof(buf), "%a, %d %b %Y %H:%M:%S GMT", &tm);
 
 	return buf;
+}
+
+void status_print(int sock, const char *version, int status_code, const char *message,
+			const char *mime_type, const struct stat *st) {
+	dprintf(sock, "%s %d %s\r\n", version, status_code, message);
+	dprintf(sock, "Date: %s\r\n", http_date_display(time(NULL)));
+	dprintf(sock, "Server: sws/1.0\r\n");
+	dprintf(sock, "Last-Modified: %s\r\n", http_date_display(st->st_mtime));
+	dprintf(sock, "Content-Type: %s\r\n", mime_type);
+	dprintf(sock, "Content-Length: %ld\r\n", st->st_size);
+	dprintf(sock, "\r\n");
 }
 
 int
@@ -136,6 +162,10 @@ handle_connections(int sock, char *docroot){
 	char version[16], request[16], path[PATH_MAX];
 	char canonic[PATH_MAX];
 
+	struct stat st;
+	const char *mime_type;
+
+
 	/* Magic! */
 	magic_t magic_cookie = magic_open(MAGIC_MIME_TYPE);
 	if (magic_cookie == NULL) {
@@ -149,11 +179,6 @@ handle_connections(int sock, char *docroot){
 	}
 
 	do{
-		struct stat st;
-		const char *mime_type;
-
-
-
 		bzero(buf, sizeof(buf));
 		bzero(filepath, sizeof(filepath));
 
@@ -170,76 +195,77 @@ handle_connections(int sock, char *docroot){
 		buf[rval] = '\0';
 		(void)printf("Client sent \n%s\n", buf);
 
+		/* If not normal HTTP, send and done */
+		if (!is_http(buf)) {
+			break;
+		}
+
 		/* Validate parts of request */
 		/* sscanf does not allow * sizes so I explicitly write them out for it */
-		if (sscanf(buf, "%15s %4095s %15s", request, path, version) == 3) {
-				
-			if (strcmp(request, "GET") != 0 && strcmp(request, "HEAD") != 0) {
-				perror("request");
+		if (sscanf(buf, "%15s %4095s %15s", request, path, version) != 3) {
+			status_print(sock, "HTTP/1.0", 400, "Bad Request", NULL, NULL);
+		}
+
+		if (strcmp(request, "GET") != 0 && strcmp(request, "HEAD") != 0) {
+			perror("request");
+			break;
+		}
+
+		if (strcmp(version, "HTTP/1.0") != 0 && strcmp(version, "HTTP/1.1") != 0) {
+			perror("version");
+			break;
+		}
+		
+		/* At this point it is a good request. Can serve */
+		
+		if (snprintf(filepath, sizeof(filepath), "%s/%s", docroot, path + 1) == -1) {
+			perror("snprintf");
+			break;
+		}
+
+		if (!realpath(filepath, canonic)) {
+			perror("realpath");
+			break;
+		}
+
+		/* Traversal prevent by checking for docroot prefix */
+		if (strncmp(canonic, docroot, strlen(docroot)) == 0) {
+			perror("escape");
+			break;
+		}
+
+		if (stat(canonic, &st) != 0 || !S_ISREG(st.st_mode)) {
+			perror("stat");
+			break;
+		}
+
+		/* More magic! */
+		mime_type = magic_file(magic_cookie, canonic);
+		if (mime_type == NULL) {
+			perror("magic");
+			break;
+		}
+
+		/* Print SUCCESSFUL request details */
+		status_print(sock, version, 200, "OK", mime_type, &st);
+
+		/* Serve file if GET */
+		if (strcmp(request, "GET") == 0 && filepath != NULL) {
+			char filebuf[BUFSIZ];
+			size_t n;
+
+			FILE *fp = fopen(filepath, "r");
+			if (fp == NULL) {
+				status_print(sock, version, 500, "Internal Server Error",
+						NULL, NULL);
 				break;
 			}
 
-			if (strcmp(version, "HTTP/1.0") != 0 && strcmp(version, "HTTP/1.1") != 0) {
-				perror("version");
-				break;
-			}
-			
-			/* At this point it is a good request. Can serve */
-			
-			if (snprintf(filepath, sizeof(filepath), "%s/%s", docroot, path + 1) == -1) {
-				perror("snprintf");
-				break;
+			while ((n = fread(filebuf, 1, sizeof(filebuf), fp)) > 0) {
+				write(sock, filebuf, n);
 			}
 
-			if (!realpath(filepath, canonic)) {
-				perror("realpath");
-				break;
-			}
-
-			/* Traversal prevent by checking for docroot prefix */
-			if (strncmp(canonic, docroot, strlen(docroot)) == 0) {
-				perror("escape");
-				break;
-			}
-
-			if (stat(canonic, &st) != 0 || !S_ISREG(st.st_mode)) {
-				perror("stat");
-				break;
-			}
-
-			/* More magic! */
-			mime_type = magic_file(magic_cookie, canonic);
-			if (mime_type == NULL) {
-				perror("magic");
-				break;
-			}
-
-			/* Print request details */
-			dprintf(sock, "%s 200 OK\r\n", version);
-			dprintf(sock, "Date: %s\r\n", http_date_display(time(NULL)));
-			dprintf(sock, "Server: sws/1.0\r\n");
-			dprintf(sock, "Last-Modified: %s\r\n", http_date_display(st.st_mtime));
-			dprintf(sock, "Content-Type: %s\r\n", mime_type);
-			dprintf(sock, "Content-Length: %ld\r\n", st.st_size);
-			dprintf(sock, "\r\n");
-
-			/* Serve file if GET */
-			if (strcmp(request, "GET") == 0 && filepath != NULL) {
-				char filebuf[BUFSIZ];
-				size_t n;
-
-				FILE *fp = fopen(filepath, "r");
-				if (fp == NULL) {
-					dprintf(sock, "%s 500 Internal Server Error\r\n\r\n", version);
-					break;
-				}
-
-				while ((n = fread(filebuf, 1, sizeof(filebuf), fp)) > 0) {
-					write(sock, filebuf, n);
-				}
-
-				fclose(fp);
-			}
+			fclose(fp);
 		}
 
 	} while(rval != 0);
