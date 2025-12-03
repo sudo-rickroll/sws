@@ -30,11 +30,6 @@
 #define PORT_NUMBER_MAX 6
 
 int is_http(const char *buf) {
-	/* Check for \r\n. If not, not HTTP */
-	if (!strstr(buf, "\r\n")) {
-		return 0;
-	}
-
 	/* Check must be for \r\n at the end, not the first occurence */
 	char *cr = strchr(buf, "\r");
 	char *nl = strchr(buf, "\n");
