@@ -61,9 +61,15 @@ void status_print(int sock, const char *version, int status_code, const char *me
 	dprintf(sock, "%s %d %s\r\n", version, status_code, message);
 	dprintf(sock, "Date: %s\r\n", http_date_display(time(NULL)));
 	dprintf(sock, "Server: sws/1.0\r\n");
-	dprintf(sock, "Last-Modified: %s\r\n", http_date_display(st->st_mtime));
-	dprintf(sock, "Content-Type: %s\r\n", mime_type);
-	dprintf(sock, "Content-Length: %ld\r\n", st->st_size);
+	if (st != NULL) {
+		dprintf(sock, "Last-Modified: %s\r\n", http_date_display(st->st_mtime));
+	}
+	if (mime_type != NULL) {
+		dprintf(sock, "Content-Type: %s\r\n", mime_type);
+	}
+	if (st != NULL) {
+		dprintf(sock, "Content-Length: %ld\r\n", st->st_size);
+	}
 	dprintf(sock, "\r\n");
 }
 
@@ -154,13 +160,15 @@ display_client_details(struct sockaddr_storage *address, socklen_t length){
 static void
 handle_connections(int sock, char *docroot){
 	int rval;
+	int filepath_len;
 
 	char buf[BUFSIZ];
 	char filepath[PATH_MAX];
 	/* Choose 16 because neither version nor request can
 	 * possibly be over this amount */
 	char version[16], request[16], path[PATH_MAX];
-	char canonic[PATH_MAX];
+	char canonic_filepath[PATH_MAX];
+	char canonic_docroot[PATH_MAX];
 
 	struct stat st;
 	const char *mime_type;
@@ -206,41 +214,55 @@ handle_connections(int sock, char *docroot){
 			status_print(sock, "HTTP/1.0", 400, "Bad Request", NULL, NULL);
 		}
 
+		if (strcmp(version, "HTTP/1.0") != 0 && strcmp(version, "HTTP/1.1") != 0) {
+			status_print(sock, "HTTP/1.0", 505, "HTTP Version Not Supported", NULL, NULL);
+			break;
+		}
+		
 		if (strcmp(request, "GET") != 0 && strcmp(request, "HEAD") != 0) {
-			perror("request");
+			status_print(sock, version, 405, "Method Not Allowed", NULL, NULL);
 			break;
 		}
 
-		if (strcmp(version, "HTTP/1.0") != 0 && strcmp(version, "HTTP/1.1") != 0) {
-			perror("version");
-			break;
-		}
-		
 		/* At this point it is a good request. Can serve */
 		
-		if (snprintf(filepath, sizeof(filepath), "%s/%s", docroot, path + 1) == -1) {
+		filepath_len = snprintf(filepath, sizeof(filepath), "%s/%s", docroot, path + 1);
+		if (filepath_len < 0) {
 			perror("snprintf");
 			break;
 		}
 
-		if (!realpath(filepath, canonic)) {
-			perror("realpath");
+		if ((size_t)filepath_len >= sizeof(filepath)) {
+			status_print(sock, version, 414, "URI Too Long", NULL, NULL);
+			break;
+		}
+
+		/* Should not fail but guard. For comparison later */
+		if (!realpath(docroot, canonic_docroot)) {
+			perror("realpath docroot");
+			break;
+		}
+
+		/* Not resolved */
+		if (!realpath(filepath, canonic_filepath)) {
+			status_print(sock, version, 404, "Not Found", NULL, NULL);
 			break;
 		}
 
 		/* Traversal prevent by checking for docroot prefix */
-		if (strncmp(canonic, docroot, strlen(docroot)) == 0) {
-			perror("escape");
+		if (strncmp(canonic_filepath, canonic_docroot, strlen(canonic_docroot)) != 0) {
+			status_print(sock, version, 403, "Forbidden", NULL, NULL);
 			break;
 		}
 
-		if (stat(canonic, &st) != 0 || !S_ISREG(st.st_mode)) {
-			perror("stat");
+		/* Not a regular file */
+		if (stat(canonic_filepath, &st) != 0 || !S_ISREG(st.st_mode)) {
+			status_print(sock, version, 404, "Not Found", NULL, NULL);
 			break;
 		}
 
 		/* More magic! */
-		mime_type = magic_file(magic_cookie, canonic);
+		mime_type = magic_file(magic_cookie, canonic_filepath);
 		if (mime_type == NULL) {
 			perror("magic");
 			break;
