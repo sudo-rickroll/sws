@@ -58,8 +58,21 @@ char *http_date_display(time_t t) {
 	return buf;
 }
 
-void status_print(int sock, const char *version, int status_code, const char *message,
-			const char *mime_type, const struct stat *st) {
+void status_print(int sock, const char *version, const char *request, int status_code, const char *message,
+			const char *mime_type, const struct stat *st, char *client_ip) {
+	size_t length;
+	char *elabReq;
+
+	length = strlen(version) + strlen(request) + 1;
+	if((elabReq = malloc(length * sizeof(char))) == NULL){
+		perror("request size allocation");
+		return;
+	}
+	if(snprintf(elabReq, sizeof(elabReq), "%s %s", request, version) < 0){
+		fprintf(stderr, "Unable to concatenate request type and version");
+		return;
+	}
+
 	dprintf(sock, "%s %d %s\r\n", version, status_code, message);
 	dprintf(sock, "Date: %s\r\n", http_date_display(time(NULL)));
 	dprintf(sock, "Server: sws/1.0\r\n");
@@ -73,6 +86,7 @@ void status_print(int sock, const char *version, int status_code, const char *me
 		dprintf(sock, "Content-Length: %ld\r\n", st->st_size);
 	}
 	dprintf(sock, "\r\n");
+	log_stream(client_ip, elabReq, status_code, st->st_size);
 }
 
 int
@@ -160,7 +174,7 @@ display_client_details(struct sockaddr_storage *address, socklen_t length){
 }
 
 static void
-handle_connections(int sock, char *docroot){
+handle_connections(int sock, char *docroot, char *ip){
 	int rval;
 	int filepath_len;
 
@@ -213,7 +227,7 @@ handle_connections(int sock, char *docroot){
 		/* Validate parts of request */
 		/* sscanf does not allow * sizes so I explicitly write them out for it */
 		if (sscanf(buf, "%15s %4095s %15s", request, path, version) != 3) {
-			status_print(sock, "HTTP/1.0", 400, "Bad Request", NULL, NULL);
+			status_print(sock, "HTTP/1.0", request, 400, "Bad Request", NULL, NULL, ip);
 		}
 
 		if (strcmp(version, "HTTP/1.0") != 0 && strcmp(version, "HTTP/1.1") != 0) {
@@ -247,19 +261,19 @@ handle_connections(int sock, char *docroot){
 
 		/* Not resolved */
 		if (!realpath(filepath, canonic_filepath)) {
-			status_print(sock, version, 404, "Not Found", NULL, NULL);
+			status_print(sock, version, request, 404, "Not Found", NULL, NULL, ip);
 			break;
 		}
 
 		/* Traversal prevent by checking for docroot prefix */
 		if (strncmp(canonic_filepath, canonic_docroot, strlen(canonic_docroot)) != 0) {
-			status_print(sock, version, 403, "Forbidden", NULL, NULL);
+			status_print(sock, version, request, 403, "Forbidden", NULL, NULL, ip);
 			break;
 		}
 
 		/* Not a regular file */
 		if (stat(canonic_filepath, &st) != 0 || !S_ISREG(st.st_mode)) {
-			status_print(sock, version, 404, "Not Found", NULL, NULL);
+			status_print(sock, version, request, 404, "Not Found", NULL, NULL, ip);
 			break;
 		}
 
@@ -271,7 +285,7 @@ handle_connections(int sock, char *docroot){
 		}
 
 		/* Print SUCCESSFUL request details */
-		status_print(sock, version, 200, "OK", mime_type, &st);
+		status_print(sock, version, request, 200, "OK", mime_type, &st, ip);
 
 		/* Serve file if GET */
 		if (strcmp(request, "GET") == 0 && filepath != NULL) {
@@ -280,8 +294,8 @@ handle_connections(int sock, char *docroot){
 
 			FILE *fp = fopen(filepath, "r");
 			if (fp == NULL) {
-				status_print(sock, version, 500, "Internal Server Error",
-						NULL, NULL);
+				status_print(sock, version, request, 500, "Internal Server Error",
+						NULL, NULL, ip);
 				break;
 			}
 
