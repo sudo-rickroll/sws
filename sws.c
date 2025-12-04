@@ -102,10 +102,7 @@ int main(int argc, char *argv[]) {
 		return EXIT_SUCCESS;
 	}
 
-	/* To be replaced by openlog() and syslog()
-	 * initialize_logging(&config, config.log);
-	 * log_stream();
-	 */
+	initialize_logging(config.log, config.debug);
 
 	if((sock = create_connections(config.address, config.port)) < 0){
 		err(EXIT_FAILURE, "Unable to establish a connection");
