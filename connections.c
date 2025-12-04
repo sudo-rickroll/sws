@@ -22,6 +22,7 @@
 #include "types.h"
 #include "connections.h"
 #include "handlers.h"
+#include "logger.h"
 
 #define BACKLOG 10
 #define DEFAULT_PORT "8080"
@@ -31,8 +32,8 @@
 
 int is_http(const char *buf) {
 	/* Check must be for \r\n at the end, not the first occurence */
-	char *cr = strchr(buf, "\r");
-	char *nl = strchr(buf, "\n");
+	char *cr = strchr(buf, '\r');
+	char *nl = strchr(buf, '\n');
 	if(!cr || !nl || cr != buf + strlen(buf) - 2 || nl != buf + strlen(buf) - 1) {
 		return 0;
 	}
