@@ -32,14 +32,11 @@
 #define PORT_NUMBER_MAX 6
 
 int is_http(const char *buf) {
-	/* Check must be for \r\n at the end, not the first occurence */
-	char *cr = strchr(buf, '\r');
-	char *nl = strchr(buf, '\n');
-	if(!cr || !nl || cr != buf + strlen(buf) - 2 || nl != buf + strlen(buf) - 1) {
+	if (buf == NULL) {
 		return 0;
 	}
 
-	/* Is HTTP */
+	/* Does not have GET/HEAD and version somewhere, isn't HTTP */
 	if ((strncmp(buf, "GET ", 4) == 0 || strncmp(buf, "HEAD ", 5) == 0)
 		&& (strstr(buf, "HTTP/1.0") || strstr(buf, "HTTP/1.1"))) {
 		return 1;
@@ -320,7 +317,7 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir, uint16_t por
 
 		/* Not resolved */
 		if (!realpath(filepath, canonic_filepath)) {
-			status_print(sock, version, request, 404, "Not Found", NULL, NULL, ip);
+			perror("realpath filepath");
 			break;
 		}
 
@@ -330,40 +327,88 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir, uint16_t por
 			break;
 		}
 
-		/* Not a regular file */
-		if (stat(canonic_filepath, &st) != 0 || !S_ISREG(st.st_mode)) {
-			status_print(sock, version, request, 404, "Not Found", NULL, NULL, ip);
+		if (stat(canonic_filepath, &st) != 0) {
+			perror("stat");
 			break;
 		}
 
-		/* More magic! */
-		mime_type = magic_file(magic_cookie, canonic_filepath);
-		if (mime_type == NULL) {
-			perror("magic");
-			break;
+		/* Is a regular file */
+		if (S_ISREG(st.st_mode)) {
+			/* More magic! */
+			mime_type = magic_file(magic_cookie, canonic_filepath);
+			if (mime_type == NULL) {
+				perror("magic");
+				break;
+			}
+
+			/* Print SUCCESSFUL request details */
+			status_print(sock, version, request, 200, "OK", mime_type, &st, ip);
+
+			/* Serve file if GET */
+			if (strcmp(request, "GET") == 0 && filepath != NULL) {
+				char filebuf[BUFSIZ];
+				size_t n;
+
+				FILE *fp = fopen(filepath, "r");
+				if (fp == NULL) {
+					status_print(sock, version, request, 500, "Internal Server Error",
+							NULL, NULL, ip);
+					break;
+				}
+
+				while ((n = fread(filebuf, 1, sizeof(filebuf), fp)) > 0) {
+					write(sock, filebuf, n);
+				}
+
+				fclose(fp);
+			}
 		}
 
-		/* Print SUCCESSFUL request details */
-		status_print(sock, version, request, 200, "OK", mime_type, &st, ip);
+		/* Is a directory */
+		if (S_ISDIR(st.st_mode)) {
+			char index_path[PATH_MAX];
+			struct stat index_st;
+			
+			if (snprintf(index_path, sizeof(index_path),
+					"%s/index.html", canonic_filepath) < 0) {
+				perror("snprintf");
+				break;
+			}
+			
+			/* More magic! */
+			mime_type = magic_file(magic_cookie, canonic_filepath);
+			if (mime_type == NULL) {
+				perror("magic");
+				break;
+			}
+			
+			/* Print SUCCESSFUL request details */
+			status_print(sock, version, request, 200, "OK", mime_type, &st, ip);
 
-		/* Serve file if GET */
-		if (strcmp(request, "GET") == 0 && filepath != NULL) {
-			char filebuf[BUFSIZ];
-			size_t n;
-
-			FILE *fp = fopen(filepath, "r");
-			if (fp == NULL) {
-				status_print(sock, version, request, 500, "Internal Server Error",
+			/* index.html does not exist, 404 for now but need to list dir contents */
+			if (stat(index_path, &index_st) != 0 || !S_ISREG(index_st.st_mode)) {
+				status_print(sock, version, request, 404, "Not Found", 
 						NULL, NULL, ip);
 				break;
 			}
 
-			while ((n = fread(filebuf, 1, sizeof(filebuf), fp)) > 0) {
-				write(sock, filebuf, n);
-			}
+			if (strcmp(request, "GET") == 0 && index_path != NULL) {
+				char filebuf[BUFSIZ];
+				size_t n;
 
-			fclose(fp);
-			break;
+				FILE *fp = fopen(index_path, "r");
+				if (fp == NULL) {
+					status_print(sock, version, request, 500, "Internal Server Error",
+							NULL, NULL, ip);
+					break;
+				}
+
+				while ((n = fread(filebuf, 1, sizeof(filebuf), fp)) > 0) {
+					write(sock, filebuf, n);
+				}
+
+				fclose(fp);
+			}
 		}
 
 	} while(rval != 0);
