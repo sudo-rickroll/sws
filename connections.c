@@ -75,10 +75,10 @@ void status_print(int sock, const char *version, const char *request, int status
 	}
 
 	dprintf(sock, "%s %d %s\r\n", version, status_code, message);
-	dprintf(sock, "Date: %s\r\n", http_date_display(time(NULL)));
+	dprintf(sock, "Date: %s\r\n", get_time(-1, "client"));
 	dprintf(sock, "Server: sws/1.0\r\n");
 	if (st != NULL) {
-		dprintf(sock, "Last-Modified: %s\r\n", http_date_display(st->st_mtime));
+		dprintf(sock, "Last-Modified: %s\r\n", get_time(st->st_mtime, "client"));
 	}
 	if (mime_type != NULL) {
 		dprintf(sock, "Content-Type: %s\r\n", mime_type);
