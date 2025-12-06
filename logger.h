@@ -3,6 +3,9 @@
 
 #include <sys/types.h>
 
+char *
+get_time(time_t, char *);
+
 void
 initialize_logging(const char *, int);
 

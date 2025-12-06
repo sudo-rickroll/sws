@@ -44,18 +44,6 @@ int is_http(const char *buf) {
 	return 0;
 }
 
-char *http_date_display(time_t t) {
-	static char buf[BUFSIZ];
-	struct tm tm;
-
-	gmtime_r(&t, &tm);
-
-	/* RFC1945 format */
-	strftime(buf, sizeof(buf), "%a, %d %b %Y %H:%M:%S GMT", &tm);
-
-	return buf;
-}
-
 void status_print(int sock, const char *version, const char *request, int status_code, const char *message,
 			const char *mime_type, const struct stat *st, char *client_ip) {
 	size_t length;
@@ -72,10 +60,10 @@ void status_print(int sock, const char *version, const char *request, int status
 	}
 
 	dprintf(sock, "%s %d %s\r\n", version, status_code, message);
-	dprintf(sock, "Date: %s\r\n", http_date_display(time(NULL)));
+	dprintf(sock, "Date: %s\r\n", get_time(-1, "client"));
 	dprintf(sock, "Server: sws/1.0\r\n");
 	if (st != NULL) {
-		dprintf(sock, "Last-Modified: %s\r\n", http_date_display(st->st_mtime));
+		dprintf(sock, "Last-Modified: %s\r\n", get_time(st->st_mtime, "client"));
 	}
 	if (mime_type != NULL) {
 		dprintf(sock, "Content-Type: %s\r\n", mime_type);

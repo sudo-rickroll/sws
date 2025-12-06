@@ -11,6 +11,28 @@
 static int ROUTE;
 static int ENABLE_DEFAULT; 
 
+char *
+get_time(time_t t, char *type){
+	static char buf[BUFSIZ];
+	struct tm gmt;
+	
+	if(t == -1 && (t = time(NULL)) <= 127){
+		err(EXIT_FAILURE, "Error getting current time");
+	}
+
+	if(gmtime_r(&t, &gmt) == NULL){
+			err(EXIT_FAILURE, "Error converting to UTC");
+	}
+
+	if((strcmp(type, "client") == 0 && strftime(buf, sizeof(buf), "%a, %d, %b, %Y %H:%M:%S GMT", &gmt) != 0) || (strcmp(type, "server") == 0 && strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &gmt) != 0)){
+		return buf;
+	}
+	else{
+	       perror("strftime");
+	       return "unknown";
+	}
+}	
+
 void
 initialize_logging(const char *path, int debug){
 
@@ -35,46 +57,30 @@ initialize_logging(const char *path, int debug){
 
 void
 log_stream(const char *address, const char *request, int status, size_t bytes){
-	time_t now;
-	struct tm *utc;
-	char timeBuf[64];
 	int len;
 
 	if(ROUTE < 0){
 		return;
 	}
-
-	if((now = time(NULL)) <= 127){
-		err(EXIT_FAILURE, "Error getting current time");
-	}
-
-	if((utc = gmtime(&now)) == NULL){
-			err(EXIT_FAILURE, "Error converting to UTC");
-	}
-
-	if(strftime(timeBuf, sizeof(timeBuf), "%Y-%m-%dT%H:%M:%SZ", utc) == 0){
-		perror("strftime");
-		exit(EXIT_FAILURE);
-	}
 	
 	do{
 		char buf[BUFSIZ];
 		memset(buf, 0, sizeof(buf));
-		if((len = snprintf(buf, sizeof(buf), "%s %s \"%s\" %d %lu\n", address, timeBuf, request, status, (unsigned long)bytes)) < 0){
+		if((len = snprintf(buf, sizeof(buf), "%s %s \"%s\" %d %lu\n", address, get_time(-1, "server"), request, status, (unsigned long)bytes)) < 0){
 			perror("snprintf");
-			exit(EXIT_FAILURE);
+			return;
 		}
 
 		if(write(ROUTE, buf, len) < 0){
 			perror("write");
-			exit(EXIT_FAILURE);
+			return;
 		}
 
 	} while(len != 0);
 
 	if(write(ROUTE, "\n", 2) < 0){
 		perror("write");
-		exit(EXIT_FAILURE);
+		return;
 	}
 }
 
