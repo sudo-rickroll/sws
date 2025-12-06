@@ -376,21 +376,21 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir, uint16_t por
 			}
 			
 			/* More magic! */
-			mime_type = magic_file(magic_cookie, canonic_filepath);
+			mime_type = magic_file(magic_cookie, index_path);
 			if (mime_type == NULL) {
 				perror("magic");
 				break;
 			}
 			
-			/* Print SUCCESSFUL request details */
-			status_print(sock, version, request, 200, "OK", mime_type, &st, ip);
-
 			/* index.html does not exist, 404 for now but need to list dir contents */
 			if (stat(index_path, &index_st) != 0 || !S_ISREG(index_st.st_mode)) {
 				status_print(sock, version, request, 404, "Not Found", 
 						NULL, NULL, ip);
 				break;
 			}
+
+			/* Print SUCCESSFUL request details */
+			status_print(sock, version, request, 200, "OK", mime_type, &index_st, ip);
 
 			if (strcmp(request, "GET") == 0 && index_path != NULL) {
 				char filebuf[BUFSIZ];
