@@ -9,6 +9,7 @@
 
 #include <err.h>
 #include <errno.h>
+#include <fts.h>
 #include <limits.h>
 #include <magic.h>
 #include <netdb.h>
@@ -29,6 +30,8 @@
 #define ENABLE_OPTION 1
 #define DISABLE_OPTION 0
 #define PORT_NUMBER_MAX 6
+/* Safe increment for dynamic allocation of HTML body length */
+#define INCREMENT 512
 
 int is_http(const char *buf) {
 	if (buf == NULL) {
@@ -42,6 +45,90 @@ int is_http(const char *buf) {
 	}
 
 	return 0;
+}
+
+char *index_directory(const char *dir_path, const char *request_path) {
+	char *paths[2];
+	char *html;
+	char link_name[PATH_MAX];
+	FTS *fts;
+	FTSENT *entry;
+	size_t len = 0;
+	size_t capacity = BUFSIZ;
+
+	paths[0] = (char *)dir_path;
+	paths[1] = NULL;
+
+	html = malloc(capacity);
+	if (html == NULL) {
+		return NULL;
+	}
+
+	/* Initial HTML format */
+	len += snprintf(html + len, capacity - len,
+		"<!DOCTYPE html>\n"
+		"<html><head><meta charset=\"UTF-8\">"
+		"<title>Index of %s</title></head><body>\n"
+		"<h1>Index of %s</h1>\n"
+		"<ul>\n",
+		request_path, request_path);
+
+	/* Error if fail */
+	fts = fts_open(paths, FTS_PHYSICAL | FTS_NOCHDIR, fts_compare);
+	if (fts == NULL) {
+		len += snprintf(html + len, capacity - len,
+			"<li>Error indexing directory.</li>\n</ul></body></html>");
+		return html;
+	}
+
+	/* Read directory */
+	while ((entry = fts_read(fts)) != NULL) {
+		/* Only top-level */
+		if (entry->fts_level != 1) {
+			continue;
+		}
+
+		/* Each dir was listed twice, skipping postorder */
+		if (entry->fts_info == FTS_DP) {
+			continue;
+		}
+
+		/* Skip files starting with . */
+		if (entry->fts_name[0] == '.') {
+			continue;
+		}
+	
+		/* Dynamically expand */
+		if (len + INCREMENT > capacity) {
+			capacity *= 2;
+			html = realloc(html, capacity);
+			if (html == NULL) {
+				fts_close(fts);
+				return NULL;
+			}
+		}
+
+		/* End with / if directory */
+		if (entry->fts_info == FTS_D) {
+			snprintf(link_name, sizeof(link_name), "%s/", entry->fts_name);
+		}
+		else {
+			snprintf(link_name, sizeof(link_name), "%s", entry->fts_name);
+		}
+
+		/* Add entry to body */
+		len += snprintf(html + len, capacity - len,
+			"<li><a href=\"%s\">%s</a></li>\n",
+			link_name, link_name);
+	}
+	
+	/* Cleanup, return */
+	fts_close(fts);
+
+	len += snprintf(html + len, capacity - len, 
+		"</ul>\n</body></html>\n");
+
+	return html;
 }
 
 void status_print(int sock, const char *version, const char *request, int status_code, const char *message,
@@ -315,39 +402,62 @@ handle_connections(int sock, char *docroot, char *ip){
 				break;
 			}
 			
-			/* More magic! */
-			mime_type = magic_file(magic_cookie, index_path);
-			if (mime_type == NULL) {
-				perror("magic");
-				break;
+			/* index.html exists, serve it */
+			if (stat(index_path, &index_st) == 0 && S_ISREG(index_st.st_mode)) {
+				/* More magic! */
+				mime_type = magic_file(magic_cookie, index_path);
+				if (mime_type == NULL) {
+					perror("magic");
+					break;
+				}
+				
+				/* Print SUCCESSFUL request details */
+				status_print(sock, version, request, 200, "OK", mime_type, &index_st, ip);
+
+				if (strcmp(request, "GET") == 0 && index_path != NULL) {
+					char filebuf[BUFSIZ];
+					size_t n;
+
+					FILE *fp = fopen(index_path, "r");
+					if (fp == NULL) {
+						status_print(sock, version, request, 500, "Internal Server Error",
+								NULL, NULL, ip);
+						break;
+					}
+
+					while ((n = fread(filebuf, 1, sizeof(filebuf), fp)) > 0) {
+						write(sock, filebuf, n);
+					}
+
+					fclose(fp);
+				}
 			}
-			
-			/* index.html does not exist, 404 for now but need to list dir contents */
-			if (stat(index_path, &index_st) != 0 || !S_ISREG(index_st.st_mode)) {
-				status_print(sock, version, request, 404, "Not Found", 
-						NULL, NULL, ip);
-				break;
-			}
+			/* index.html does not exist, print directory index in HTML format */
+			else {
+				char *html = index_directory(canonic_filepath, path);
+				off_t html_len = (off_t)strlen(html);
 
-			/* Print SUCCESSFUL request details */
-			status_print(sock, version, request, 200, "OK", mime_type, &index_st, ip);
-
-			if (strcmp(request, "GET") == 0 && index_path != NULL) {
-				char filebuf[BUFSIZ];
-				size_t n;
-
-				FILE *fp = fopen(index_path, "r");
-				if (fp == NULL) {
+				if (html == NULL) {
 					status_print(sock, version, request, 500, "Internal Server Error",
 							NULL, NULL, ip);
 					break;
 				}
-
-				while ((n = fread(filebuf, 1, sizeof(filebuf), fp)) > 0) {
-					write(sock, filebuf, n);
+				
+				/* Manually print headers because dir length must be sent accurately
+				 * and status_print cannot handle this along
+				 */
+				dprintf(sock, "%s 200 OK\r\n", version);
+				dprintf(sock, "Date: %s\r\n", get_time(-1, "client"));
+				dprintf(sock, "Server: sws/1.0\r\n");
+				dprintf(sock, "Content-Type: text/html\r\n");
+				dprintf(sock, "Content-Length: %ld\r\n", html_len);
+				dprintf(sock, "\r\n");
+				
+				if (strcmp(request, "GET") == 0) {
+					write(sock, html, html_len);
 				}
 
-				fclose(fp);
+				free(html);
 			}
 		}
 
