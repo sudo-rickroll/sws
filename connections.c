@@ -62,8 +62,14 @@ char *http_date_display(time_t t) {
 
 void status_print(int sock, const char *version, const char *request, int status_code, const char *message,
 			const char *mime_type, const struct stat *st, char *client_ip) {
+	FILE *sock_fp;
 	size_t length;
 	char *elabReq;
+
+	if((sock_fp = fdopen(sock, "w")) == NULL){
+		perror("fdopen sock");
+		return;
+	}
 
 	length = strlen(version) + strlen(request) + 2;
 	if((elabReq = malloc(length * sizeof(char))) == NULL){
@@ -76,19 +82,20 @@ void status_print(int sock, const char *version, const char *request, int status
 		return;
 	}
 
-	dprintf(sock, "%s %d %s\r\n", version, status_code, message);
-	dprintf(sock, "Date: %s\r\n", get_time(0, "client"));
-	dprintf(sock, "Server: sws/1.0\r\n");
+	fprintf(sock_fp, "%s %d %s\r\n", version, status_code, message);
+	fprintf(sock_fp, "Date: %s\r\n", get_time(0, "client"));
+	fprintf(sock_fp, "Server: sws/1.0\r\n");
 	if (st != NULL) {
-		dprintf(sock, "Last-Modified: %s\r\n", get_time(st->st_mtime, "client"));
+		fprintf(sock_fp, "Last-Modified: %s\r\n", get_time(st->st_mtime, "client"));
 	}
 	if (mime_type != NULL) {
-		dprintf(sock, "Content-Type: %s\r\n", mime_type);
+		fprintf(sock_fp, "Content-Type: %s\r\n", mime_type);
 	}
 	if (st != NULL) {
-		dprintf(sock, "Content-Length: %ld\r\n", st->st_size);
+		fprintf(sock_fp, "Content-Length: %ld\r\n", st->st_size);
 	}
-	dprintf(sock, "\r\n");
+	fprintf(sock_fp, "\r\n");
+	fflush(sock_fp);
 	log_stream(client_ip, elabReq, status_code, st ? st->st_size : 0);
 	free(elabReq);
 }
@@ -274,6 +281,8 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir, uint16_t por
 				status_print(sock, version, request, 414, "URI longer than pathmax", NULL, NULL, ip);
 				break;
 			}
+
+			printf("DEBUG: CGI path = %s\n", cgi_path);
 
 			if(stat(cgi_path, &st) != 0){
 				status_print(sock, version, request, 404, "Not Found", NULL, NULL, ip);
