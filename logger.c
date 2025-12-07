@@ -16,7 +16,7 @@ get_time(time_t t, char *type){
 	static char buf[BUFSIZ];
 	struct tm gmt;
 	
-	if(t == -1 && (t = time(NULL)) <= 127){
+	if(t == 0 && (t = time(NULL)) <= 127){
 		err(EXIT_FAILURE, "Error getting current time");
 	}
 
@@ -58,30 +58,23 @@ initialize_logging(const char *path, int debug){
 void
 log_stream(const char *address, const char *request, int status, size_t bytes){
 	int len;
-
+	char buf[BUFSIZ];
 	if(ROUTE < 0){
 		return;
 	}
 	
-	do{
-		char buf[BUFSIZ];
-		memset(buf, 0, sizeof(buf));
-		if((len = snprintf(buf, sizeof(buf), "%s %s \"%s\" %d %lu\n", address, get_time(-1, "server"), request, status, (unsigned long)bytes)) < 0){
-			perror("snprintf");
-			return;
-		}
 
-		if(write(ROUTE, buf, len) < 0){
-			perror("write");
-			return;
-		}
+	memset(buf, 0, sizeof(buf));
+	if((len = snprintf(buf, sizeof(buf), "%s %s \"%s\" %d %lu\n", address, get_time(0, "server"), request, status, (unsigned long)bytes)) < 0){
+		perror("snprintf");
+		return;
+	}
 
-	} while(len != 0);
-
-	if(write(ROUTE, "\n", 2) < 0){
+	if(write(ROUTE, buf, len) < 0){
 		perror("write");
 		return;
 	}
+
 }
 
 

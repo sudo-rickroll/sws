@@ -9,6 +9,6 @@ int
 create_connections(char *address, uint16_t port);
 
 void
-accept_connections(int sock, char *docroot);
+accept_connections(int sock, sws_options *config);
 
 #endif

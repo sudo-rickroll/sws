@@ -1,7 +1,7 @@
 CFLAGS = -ansi -g -Wall -Werror -Wextra -Wformat=2 -Wjump-misses-init -Wlogical-op -Wpedantic -Wshadow
 LD_FLAGS = -lmagic
 TARGET_NAME = sws
-OBJECT_FILES = sws.o logger.o connections.o handlers.o
+OBJECT_FILES = sws.o logger.o connections.o handlers.o cgi.o
 
 all: ${TARGET_NAME}
 

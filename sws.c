@@ -108,7 +108,7 @@ int main(int argc, char *argv[]) {
 		err(EXIT_FAILURE, "Unable to establish a connection");
 	}
 
-	accept_connections(sock, config.docroot);
+	accept_connections(sock, &config);
 
 	(void)close(sock);
 	

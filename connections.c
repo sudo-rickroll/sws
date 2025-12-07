@@ -19,6 +19,7 @@
 #include <unistd.h>
 #include <signal.h>
 
+#include "cgi.h"
 #include "types.h"
 #include "connections.h"
 #include "handlers.h"
@@ -64,18 +65,19 @@ void status_print(int sock, const char *version, const char *request, int status
 	size_t length;
 	char *elabReq;
 
-	length = strlen(version) + strlen(request) + 1;
+	length = strlen(version) + strlen(request) + 2;
 	if((elabReq = malloc(length * sizeof(char))) == NULL){
 		perror("request size allocation");
 		return;
 	}
-	if(snprintf(elabReq, sizeof(elabReq), "%s %s", request, version) < 0){
+	if(snprintf(elabReq, length, "%s %s", request, version) < 0){
 		fprintf(stderr, "Unable to concatenate request type and version");
+		free(elabReq);
 		return;
 	}
 
 	dprintf(sock, "%s %d %s\r\n", version, status_code, message);
-	dprintf(sock, "Date: %s\r\n", get_time(-1, "client"));
+	dprintf(sock, "Date: %s\r\n", get_time(0, "client"));
 	dprintf(sock, "Server: sws/1.0\r\n");
 	if (st != NULL) {
 		dprintf(sock, "Last-Modified: %s\r\n", get_time(st->st_mtime, "client"));
@@ -87,7 +89,8 @@ void status_print(int sock, const char *version, const char *request, int status
 		dprintf(sock, "Content-Length: %ld\r\n", st->st_size);
 	}
 	dprintf(sock, "\r\n");
-	log_stream(client_ip, elabReq, status_code, st->st_size);
+	log_stream(client_ip, elabReq, status_code, st ? st->st_size : 0);
+	free(elabReq);
 }
 
 int
@@ -186,7 +189,7 @@ display_client_details(struct sockaddr_storage *address, socklen_t length, char 
 }
 
 static void
-handle_connections(int sock, char *docroot, char *ip){
+handle_connections(int sock, char *docroot, char *ip, char *cgidir, uint16_t port){
 	int rval;
 	int filepath_len;
 
@@ -248,6 +251,51 @@ handle_connections(int sock, char *docroot, char *ip){
 		
 		if (strcmp(request, "GET") != 0 && strcmp(request, "HEAD") != 0) {
 			perror("strcmp");
+			break;
+		}
+
+		if(cgidir != NULL && is_cgi(path)){
+			char cgi_path[PATH_MAX];
+			char *query;
+			char port_cast[PORT_NUMBER_MAX];
+			int cgi_path_length;
+
+			query = strchr(path, '?');
+			if (query != NULL){
+				/* Add null in place of "?" so that path reads until query string and not any longer */
+				*query = '\0';
+				query++;
+			}
+
+			/* 8 for length of /cgi-bin */
+			cgi_path_length = snprintf(cgi_path, sizeof(cgi_path), "%s%s", cgidir, path + 8);
+
+			if(cgi_path_length < 0 || (size_t)cgi_path_length >= sizeof(cgi_path)){
+				status_print(sock, version, request, 414, "URI longer than pathmax", NULL, NULL, ip);
+				break;
+			}
+
+			if(stat(cgi_path, &st) != 0){
+				status_print(sock, version, request, 404, "Not Found", NULL, NULL, ip);
+				break;
+			}
+
+			/* Check if regular file and can be executed */
+			if(!S_ISREG(st.st_mode) || access(cgi_path, X_OK) != 0){
+				status_print(sock, version, request, 403, "Forbidden", NULL, NULL, ip);
+				break;
+			}
+
+			if(snprintf(port_cast, sizeof(port_cast), "%hu", port) < 0){
+				perror("snprintf cgi port");
+				break;
+			}
+
+
+			if(cgi_exec(sock, cgi_path, request, version, query, path, port_cast, ip) < 0){
+				status_print(sock, version, request, 500, "Internal Server Error", NULL, NULL, ip);
+			}
+
 			break;
 		}
 
@@ -315,6 +363,7 @@ handle_connections(int sock, char *docroot, char *ip){
 			}
 
 			fclose(fp);
+			break;
 		}
 
 	} while(rval != 0);
@@ -324,7 +373,7 @@ handle_connections(int sock, char *docroot, char *ip){
 }
 
 void
-accept_connections(int sock, char *docroot){
+accept_connections(int sock, sws_options *config){
 	struct sockaddr_storage address;
 	char client_ip[NI_MAXHOST];
 	int fd;
@@ -352,7 +401,7 @@ accept_connections(int sock, char *docroot){
 
 		if(pid == 0){
 			(void)close(sock);
-			handle_connections(fd, docroot, client_ip);
+			handle_connections(fd, config->docroot, client_ip, config->cgi, config->port);
 			(void)printf("Client %s has closed connection...\n\n", client_ip);
 			(void)close(fd);
 			exit(EXIT_SUCCESS);
