@@ -282,8 +282,6 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir, uint16_t por
 				break;
 			}
 
-			printf("DEBUG: CGI path = %s\n", cgi_path);
-
 			if(stat(cgi_path, &st) != 0){
 				status_print(sock, version, request, 404, "Not Found", NULL, NULL, ip);
 				break;
