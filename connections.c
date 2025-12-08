@@ -1,30 +1,29 @@
-#include <arpa/inet.h>
+#include "connections.h"
 
-#include <sys/stat.h>
-#include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/time.h>
-
+#include <sys/types.h>
 #include <netinet/in.h>
 
+#include <arpa/inet.h>
 #include <err.h>
 #include <errno.h>
 #include <fts.h>
 #include <limits.h>
 #include <magic.h>
 #include <netdb.h>
+#include <signal.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>
 #include <string.h>
 #include <unistd.h>
-#include <signal.h>
 
 #include "cgi.h"
-#include "types.h"
-#include "connections.h"
 #include "handlers.h"
 #include "logger.h"
+#include "types.h"
 
 #define BACKLOG 10
 #define DEFAULT_PORT "8080"
@@ -34,21 +33,25 @@
 /* Safe increment for dynamic allocation of HTML body length */
 #define INCREMENT 512
 
-int is_http(const char *buf) {
+int
+is_http(const char *buf)
+{
 	if (buf == NULL) {
 		return 0;
 	}
 
 	/* Does not have GET/HEAD and version somewhere, isn't HTTP */
-	if ((strncmp(buf, "GET ", 4) == 0 || strncmp(buf, "HEAD ", 5) == 0)
-		&& (strstr(buf, "HTTP/1.0") || strstr(buf, "HTTP/1.1"))) {
+	if ((strncmp(buf, "GET ", 4) == 0 || strncmp(buf, "HEAD ", 5) == 0) &&
+	    (strstr(buf, "HTTP/1.0") || strstr(buf, "HTTP/1.1"))) {
 		return 1;
 	}
 
 	return 0;
 }
 
-char *index_directory(const char *dir_path, const char *request_path) {
+char *
+index_directory(const char *dir_path, const char *request_path)
+{
 	char *paths[2];
 	char *html;
 	char link_name[PATH_MAX];
@@ -67,18 +70,19 @@ char *index_directory(const char *dir_path, const char *request_path) {
 
 	/* Initial HTML format */
 	len += snprintf(html + len, capacity - len,
-		"<!DOCTYPE html>\n"
-		"<html><head><meta charset=\"UTF-8\">"
-		"<title>Index of %s</title></head><body>\n"
-		"<h1>Index of %s</h1>\n"
-		"<ul>\n",
-		request_path, request_path);
+	                "<!DOCTYPE html>\n"
+	                "<html><head><meta charset=\"UTF-8\">"
+	                "<title>Index of %s</title></head><body>\n"
+	                "<h1>Index of %s</h1>\n"
+	                "<ul>\n",
+	                request_path, request_path);
 
 	/* Error if fail */
 	fts = fts_open(paths, FTS_PHYSICAL | FTS_NOCHDIR, fts_compare);
 	if (fts == NULL) {
-		len += snprintf(html + len, capacity - len,
-			"<li>Error indexing directory.</li>\n</ul></body></html>");
+		len +=
+			snprintf(html + len, capacity - len,
+		             "<li>Error indexing directory.</li>\n</ul></body></html>");
 		return html;
 	}
 
@@ -98,7 +102,7 @@ char *index_directory(const char *dir_path, const char *request_path) {
 		if (entry->fts_name[0] == '.') {
 			continue;
 		}
-	
+
 		/* Dynamically expand */
 		if (len + INCREMENT > capacity) {
 			capacity *= 2;
@@ -112,43 +116,44 @@ char *index_directory(const char *dir_path, const char *request_path) {
 		/* End with / if directory */
 		if (entry->fts_info == FTS_D) {
 			snprintf(link_name, sizeof(link_name), "%s/", entry->fts_name);
-		}
-		else {
+		} else {
 			snprintf(link_name, sizeof(link_name), "%s", entry->fts_name);
 		}
 
 		/* Add entry to body */
-		len += snprintf(html + len, capacity - len,
-			"<li><a href=\"%s\">%s</a></li>\n",
-			link_name, link_name);
+		len +=
+			snprintf(html + len, capacity - len,
+		             "<li><a href=\"%s\">%s</a></li>\n", link_name, link_name);
 	}
-	
+
 	/* Cleanup, return */
 	fts_close(fts);
 
-	len += snprintf(html + len, capacity - len, 
-		"</ul>\n</body></html>\n");
+	len += snprintf(html + len, capacity - len, "</ul>\n</body></html>\n");
 
 	return html;
 }
 
-void status_print(int sock, const char *version, const char *request, int status_code, const char *message,
-			const char *mime_type, const struct stat *st, char *client_ip) {
+void
+status_print(int sock, const char *version, const char *request,
+             int status_code, const char *message, const char *mime_type,
+             const struct stat *st, char *client_ip)
+{
 	FILE *sock_fp;
 	size_t length;
 	char *elabReq;
 
-	if((sock_fp = fdopen(sock, "w")) == NULL){
+	if ((sock_fp = fdopen(sock, "w")) == NULL) {
 		perror("fdopen sock");
 		return;
 	}
 
 	length = strlen(version) + strlen(request) + 2;
-	if((elabReq = malloc(length * sizeof(char))) == NULL){
+	if ((elabReq = malloc(length * sizeof(char))) == NULL) {
 		perror("request size allocation");
 		return;
 	}
-	if(snprintf(elabReq, length, "%s %s", request, version) < 0){
+	if (snprintf(elabReq, length, "%s %s", request, version) < 0) {
 		fprintf(stderr, "Unable to concatenate request type and version");
 		free(elabReq);
 		return;
@@ -158,7 +163,8 @@ void status_print(int sock, const char *version, const char *request, int status
 	fprintf(sock_fp, "Date: %s\r\n", get_time(0, "client"));
 	fprintf(sock_fp, "Server: sws/1.0\r\n");
 	if (st != NULL) {
-		fprintf(sock_fp, "Last-Modified: %s\r\n", get_time(st->st_mtime, "client"));
+		fprintf(sock_fp, "Last-Modified: %s\r\n",
+		        get_time(st->st_mtime, "client"));
 	}
 	if (mime_type != NULL) {
 		fprintf(sock_fp, "Content-Type: %s\r\n", mime_type);
@@ -173,7 +179,8 @@ void status_print(int sock, const char *version, const char *request, int status
 }
 
 int
-create_connections(char *address, uint16_t port){
+create_connections(char *address, uint16_t port)
+{
 	int sock, sockopt;
 	struct addrinfo server, *next, *current;
 	char port_cast[PORT_NUMBER_MAX];
@@ -186,65 +193,70 @@ create_connections(char *address, uint16_t port){
 	server.ai_socktype = SOCK_STREAM;
 	server.ai_flags = AI_PASSIVE;
 
-	if(getaddrinfo(address, port_cast, &server, &next) > 0){
+	if (getaddrinfo(address, port_cast, &server, &next) > 0) {
 		err(EXIT_FAILURE, "Unable to resolve address %s:%hu", address, port);
 	}
-	
-	/* If -i isn't specified, try list of addresses
-	 * until one works
-	 */
-	for(current = next; current != NULL; current = current->ai_next){
-		if((sock = socket(current->ai_family, current->ai_socktype, current->ai_protocol)) < 0){
+
+	/* If -i isn't specified, try list of addresses until one works */
+	for (current = next; current != NULL; current = current->ai_next) {
+		if ((sock = socket(current->ai_family, current->ai_socktype,
+		                   current->ai_protocol)) < 0) {
 			perror("socket");
 			continue;
 		}
 
-		/* To make the port available instantly after 
-		 * a quick server restart, using SO_REUSEADDR. 
+		/* To make the port available instantly after
+		 * a quick server restart, using SO_REUSEADDR.
 		 * Otherwise, it'll be in TIME_WAIT.
 		 */
 		sockopt = ENABLE_OPTION;
-		if(setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &sockopt, sizeof(sockopt)) < 0){
+		if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &sockopt,
+		               sizeof(sockopt)) < 0) {
 			perror("setsockopt SO_REUSEADDR");
 			(void)close(sock);
 			continue;
 		}
 
-		/* For dualstack. Otherwise, we'd have to do 
+		/* For dualstack. Otherwise, we'd have to do
 		 * PF_INET and PF_INET6 separately as in the
 		 * dualstack-streamread.c program from the
 		 * lecture. With this, IPv6 accepts both
 		 * v4 and v6
 		 */
-		if(current->ai_family == AF_INET6){
+		if (current->ai_family == AF_INET6) {
 			sockopt = DISABLE_OPTION;
-			if(setsockopt(sock, IPPROTO_IPV6, IPV6_V6ONLY, &sockopt, sizeof(sockopt)) < 0){
+			if (setsockopt(sock, IPPROTO_IPV6, IPV6_V6ONLY, &sockopt,
+			               sizeof(sockopt)) < 0) {
 				perror("setsockopt IPV6_V6ONLY");
 				(void)close(sock);
 				continue;
 			}
 		}
 
-		if(bind(sock, current->ai_addr, current->ai_addrlen) < 0){
+		if (bind(sock, current->ai_addr, current->ai_addrlen) < 0) {
 			perror("bind");
 			(void)close(sock);
 			continue;
 		}
 
-		if(listen(sock, BACKLOG) < 0){
+		if (listen(sock, BACKLOG) < 0) {
 			perror("listen");
 			(void)close(sock);
 			continue;
-		}
-		else{
+		} else {
 			struct sockaddr_storage server_address;
 			socklen_t length;
 			char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
 
 			length = sizeof(server_address);
 
-			if(getsockname(sock, (struct sockaddr *)&server_address, &length) == 0 && getnameinfo((struct sockaddr *)&server_address, length, hbuf, sizeof(hbuf), sbuf, sizeof(sbuf), NI_NUMERICHOST | NI_NUMERICSERV) == 0){
-				(void)printf("Server listening on address %s and port %s\n", hbuf, sbuf);
+			if (getsockname(sock, (struct sockaddr *)&server_address,
+			                &length) == 0 &&
+			    getnameinfo((struct sockaddr *)&server_address, length, hbuf,
+			                sizeof(hbuf), sbuf, sizeof(sbuf),
+			                NI_NUMERICHOST | NI_NUMERICSERV) == 0) {
+				(void)printf("Server listening on address %s and port %s\n",
+				             hbuf, sbuf);
 			}
 		}
 
@@ -257,10 +269,13 @@ create_connections(char *address, uint16_t port){
 }
 
 static void
-display_client_details(struct sockaddr_storage *address, socklen_t length, char *ip, char *port, size_t ip_len, size_t port_len){
+display_client_details(struct sockaddr_storage *address, socklen_t length,
+                       char *ip, char *port, size_t ip_len, size_t port_len)
+{
 
-	if(getnameinfo((struct sockaddr *)address, length, ip, ip_len, port, port_len, NI_NUMERICHOST | NI_NUMERICSERV)){
-		(void)snprintf(ip, sizeof(ip), "Unknown");
+	if (getnameinfo((struct sockaddr *)address, length, ip, ip_len, port,
+	                port_len, NI_NUMERICHOST | NI_NUMERICSERV)) {
+		(void)snprintf(ip, ip_len, "Unknown");
 		return;
 	}
 
@@ -268,7 +283,9 @@ display_client_details(struct sockaddr_storage *address, socklen_t length, char 
 }
 
 static void
-handle_connections(int sock, char *docroot, char *ip, char *cgidir, uint16_t port){
+handle_connections(int sock, char *docroot, char *ip, char *cgidir,
+                   uint16_t port)
+{
 	int rval;
 	int filepath_len;
 
@@ -296,16 +313,16 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir, uint16_t por
 		return;
 	}
 
-	do{
+	do {
 		bzero(buf, sizeof(buf));
 		bzero(filepath, sizeof(filepath));
 
-		if((rval = read(sock, buf, BUFSIZ)) < 0){
+		if ((rval = read(sock, buf, BUFSIZ)) < 0) {
 			perror("Stream read error");
 			break;
 		}
 
-		if(rval == 0){
+		if (rval == 0) {
 			break;
 		}
 
@@ -318,68 +335,80 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir, uint16_t por
 		}
 
 		/* Validate parts of request */
-		/* sscanf does not allow * sizes so I explicitly write them out for it */
+		/* sscanf does not allow * sizes so I explicitly write them out for it
+		 */
 		if (sscanf(buf, "%15s %4095s %15s", request, path, version) != 3) {
-			status_print(sock, "HTTP/1.0", request, 400, "Bad Request", NULL, NULL, ip);
+			status_print(sock, "HTTP/1.0", request, 400, "Bad Request", NULL,
+			             NULL, ip);
 			break;
 		}
 
-		if (strcmp(version, "HTTP/1.0") != 0 && strcmp(version, "HTTP/1.1") != 0) {
+		if (strcmp(version, "HTTP/1.0") != 0 &&
+		    strcmp(version, "HTTP/1.1") != 0) {
 			perror("strcmp");
 			break;
 		}
-		
+
 		if (strcmp(request, "GET") != 0 && strcmp(request, "HEAD") != 0) {
 			perror("strcmp");
 			break;
 		}
-		if(cgidir != NULL && is_cgi(path)){
+		if (cgidir != NULL && is_cgi(path)) {
 			char cgi_path[PATH_MAX];
 			char *query;
 			char port_cast[PORT_NUMBER_MAX];
 			int cgi_path_length;
 			query = strchr(path, '?');
-			if (query != NULL){
-				/* Add null in place of "?" so that path reads until query string and not any longer */
+			if (query != NULL) {
+				/* Add null in place of "?" so that path reads until query
+				 * string and not any longer */
 				*query = '\0';
 				query++;
 			}
 
 			/* 8 for length of /cgi-bin */
-			cgi_path_length = snprintf(cgi_path, sizeof(cgi_path), "%s%s", cgidir, path + 8);
+			cgi_path_length =
+				snprintf(cgi_path, sizeof(cgi_path), "%s%s", cgidir, path + 8);
 
-			if(cgi_path_length < 0 || (size_t)cgi_path_length >= sizeof(cgi_path)){
-				status_print(sock, version, request, 414, "URI longer than pathmax", NULL, NULL, ip);
+			if (cgi_path_length < 0 ||
+			    (size_t)cgi_path_length >= sizeof(cgi_path)) {
+				status_print(sock, version, request, 414,
+				             "URI longer than pathmax", NULL, NULL, ip);
 				break;
 			}
 
-			if(stat(cgi_path, &st) != 0){
-				status_print(sock, version, request, 404, "Not Found", NULL, NULL, ip);
+			if (stat(cgi_path, &st) != 0) {
+				status_print(sock, version, request, 404, "Not Found", NULL,
+				             NULL, ip);
 				break;
 			}
 
 			/* Check if regular file and can be executed */
-			if(!S_ISREG(st.st_mode) || access(cgi_path, X_OK) != 0){
-				status_print(sock, version, request, 403, "Forbidden", NULL, NULL, ip);
+			if (!S_ISREG(st.st_mode) || access(cgi_path, X_OK) != 0) {
+				status_print(sock, version, request, 403, "Forbidden", NULL,
+				             NULL, ip);
 				break;
 			}
 
-			if(snprintf(port_cast, sizeof(port_cast), "%hu", port) < 0){
+			if (snprintf(port_cast, sizeof(port_cast), "%hu", port) < 0) {
 				perror("snprintf cgi port");
 				break;
 			}
 
 
-			if(cgi_exec(sock, cgi_path, request, version, query, path, port_cast, ip) < 0){
-				status_print(sock, version, request, 500, "Internal Server Error", NULL, NULL, ip);
+			if (cgi_exec(sock, cgi_path, request, version, query, path,
+			             port_cast, ip) < 0) {
+				status_print(sock, version, request, 500,
+				             "Internal Server Error", NULL, NULL, ip);
 			}
 
 			break;
 		}
 
 		/* At this point it is a good request. Can serve */
-		
-		filepath_len = snprintf(filepath, sizeof(filepath), "%s/%s", docroot, path + 1);
+
+		filepath_len =
+			snprintf(filepath, sizeof(filepath), "%s/%s", docroot, path + 1);
 		if (filepath_len < 0) {
 			perror("snprintf");
 			break;
@@ -390,12 +419,6 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir, uint16_t por
 			break;
 		}
 
-		/* Should not fail but guard. For comparison later */
-		if (!realpath(docroot, canonic_docroot)) {
-			perror("realpath docroot");
-			break;
-		}
-
 		/* Not resolved */
 		if (!realpath(filepath, canonic_filepath)) {
 			perror("realpath filepath");
@@ -403,8 +426,10 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir, uint16_t por
 		}
 
 		/* Traversal prevent by checking for docroot prefix */
-		if (strncmp(canonic_filepath, canonic_docroot, strlen(canonic_docroot)) != 0) {
-			status_print(sock, version, request, 403, "Forbidden", NULL, NULL, ip);
+		if (strncmp(canonic_filepath, canonic_docroot,
+		            strlen(canonic_docroot)) != 0) {
+			status_print(sock, version, request, 403, "Forbidden", NULL, NULL,
+			             ip);
 			break;
 		}
 
@@ -426,14 +451,14 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir, uint16_t por
 			status_print(sock, version, request, 200, "OK", mime_type, &st, ip);
 
 			/* Serve file if GET */
-			if (strcmp(request, "GET") == 0 && filepath != NULL) {
+			if (strcmp(request, "GET") == 0) {
 				char filebuf[BUFSIZ];
 				size_t n;
 
 				FILE *fp = fopen(filepath, "r");
 				if (fp == NULL) {
-					status_print(sock, version, request, 500, "Internal Server Error",
-							NULL, NULL, ip);
+					status_print(sock, version, request, 500,
+					             "Internal Server Error", NULL, NULL, ip);
 					break;
 				}
 
@@ -449,13 +474,13 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir, uint16_t por
 		if (S_ISDIR(st.st_mode)) {
 			char index_path[PATH_MAX];
 			struct stat index_st;
-			
-			if (snprintf(index_path, sizeof(index_path),
-					"%s/index.html", canonic_filepath) < 0) {
+
+			if (snprintf(index_path, sizeof(index_path), "%s/index.html",
+			             canonic_filepath) < 0) {
 				perror("snprintf");
 				break;
 			}
-			
+
 			/* index.html exists, serve it */
 			if (stat(index_path, &index_st) == 0 && S_ISREG(index_st.st_mode)) {
 				/* More magic! */
@@ -464,18 +489,19 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir, uint16_t por
 					perror("magic");
 					break;
 				}
-				
-				/* Print SUCCESSFUL request details */
-				status_print(sock, version, request, 200, "OK", mime_type, &index_st, ip);
 
-				if (strcmp(request, "GET") == 0 && index_path != NULL) {
+				/* Print SUCCESSFUL request details */
+				status_print(sock, version, request, 200, "OK", mime_type,
+				             &index_st, ip);
+
+				if (strcmp(request, "GET") == 0) {
 					char filebuf[BUFSIZ];
 					size_t n;
 
 					FILE *fp = fopen(index_path, "r");
 					if (fp == NULL) {
-						status_print(sock, version, request, 500, "Internal Server Error",
-								NULL, NULL, ip);
+						status_print(sock, version, request, 500,
+						             "Internal Server Error", NULL, NULL, ip);
 						break;
 					}
 
@@ -486,19 +512,20 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir, uint16_t por
 					fclose(fp);
 				}
 			}
-			/* index.html does not exist, print directory index in HTML format */
+			/* index.html does not exist, print directory index in HTML format
+			 */
 			else {
 				char *html = index_directory(canonic_filepath, path);
 				off_t html_len = (off_t)strlen(html);
 
 				if (html == NULL) {
-					status_print(sock, version, request, 500, "Internal Server Error",
-							NULL, NULL, ip);
+					status_print(sock, version, request, 500,
+					             "Internal Server Error", NULL, NULL, ip);
 					break;
 				}
-				
-				/* Manually print headers because dir length must be sent accurately
-				 * and status_print cannot handle this along
+
+				/* Manually print headers because dir length must be sent
+				 * accurately and status_print cannot handle this along
 				 */
 				dprintf(sock, "%s 200 OK\r\n", version);
 				dprintf(sock, "Date: %s\r\n", get_time(-1, "client"));
@@ -506,7 +533,7 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir, uint16_t por
 				dprintf(sock, "Content-Type: text/html\r\n");
 				dprintf(sock, "Content-Length: %ld\r\n", html_len);
 				dprintf(sock, "\r\n");
-				
+
 				if (strcmp(request, "GET") == 0) {
 					write(sock, html, html_len);
 				}
@@ -515,51 +542,50 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir, uint16_t por
 			}
 		}
 
-	} while(rval != 0);
+	} while (rval != 0);
 
 	/* Cleanup */
 	magic_close(magic_cookie);
 }
 
 void
-accept_connections(int sock, sws_options *config){
+accept_connections(int sock, sws_options *config)
+{
 	struct sockaddr_storage address;
 	char client_ip[NI_MAXHOST], client_port[NI_MAXSERV];
 	int fd;
 	socklen_t length;
 	pid_t pid;
 
-	if(signal(SIGCHLD, reap_connection) == SIG_ERR){
+	if (signal(SIGCHLD, reap_connection) == SIG_ERR) {
 		perror("signal handler");
 	}
 
-	for(;;){
+	for (;;) {
 		length = sizeof(address);
-		if((fd = accept(sock, (struct sockaddr *)&address, &length)) < 0){
+		if ((fd = accept(sock, (struct sockaddr *)&address, &length)) < 0) {
 			(errno == EINTR) ? perror("signal") : perror("accept");
 			continue;
 		}
 
-		display_client_details(&address, length, client_ip, client_port, sizeof(client_ip), sizeof(client_port));
+		display_client_details(&address, length, client_ip, client_port,
+		                       sizeof(client_ip), sizeof(client_port));
 
-		if((pid = fork()) < 0){
+		if ((pid = fork()) < 0) {
 			perror("fork");
 			continue;
 		}
 
 
-		if(pid == 0){
+		if (pid == 0) {
 			(void)close(sock);
-			handle_connections(fd, config->docroot, client_ip, config->cgi, config->port);
+			handle_connections(fd, config->docroot, client_ip, config->cgi,
+			                   config->port);
 			(void)printf("Client %s has closed connection...\n\n", client_ip);
 			(void)close(fd);
 			exit(EXIT_SUCCESS);
 		}
 
 		(void)close(fd);
-		
 	}
 }
-
-
-

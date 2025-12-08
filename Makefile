@@ -1,4 +1,4 @@
-CFLAGS = -ansi -g -Wall -Werror -Wextra -Wformat=2 -Wjump-misses-init -Wlogical-op -Wpedantic -Wshadow
+CFLAGS = -g -Wall -Werror -Wextra -Wformat=2 -Wjump-misses-init -Wlogical-op -Wpedantic -Wshadow -std=c11 -D_XOPEN_SOURCE=700 -D_DEFAULT_SOURCE -D_NETBSD_SOURCE
 LD_FLAGS = -lmagic
 TARGET_NAME = sws
 OBJECT_FILES = sws.o logger.o connections.o handlers.o cgi.o

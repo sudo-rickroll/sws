@@ -1,21 +1,29 @@
-#include <ctype.h>
+#include <sys/stat.h>
+
+#include <err.h>
+#include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <err.h>
 
-#include <sys/stat.h>
-
-#include "types.h"
-#include "logger.h"
 #include "connections.h"
+#include "logger.h"
+#include "types.h"
 
-int input_validation(int argc, char **argv, sws_options *config) {
-	/* Default assignments */
+void
+usage(char *program_name)
+{
+	printf("Usage: %s [-dh] [-c dir] [-i address] [-l file] [-p port] dir\n",
+	       program_name);
+}
+
+int
+input_validation(int argc, char **argv, sws_options *config)
+{
 	int opt;
 	long user_port;
 	struct stat st;
-	char *end;	
+	char *end;
 
 	config->port = 8080;
 	config->debug = false;
@@ -27,90 +35,107 @@ int input_validation(int argc, char **argv, sws_options *config) {
 
 	while ((opt = getopt(argc, argv, "c:dhi:l:p:")) != -1) {
 		switch (opt) {
-			case 'c':
-				config->cgi = optarg;
-				break;
-			case 'd':
-				config->debug = true;
-				break;
-			case 'h':
-				config->help = true;
-				break;
-			case 'i':
-				config->address = optarg;
-				break;
-			case 'l':
-				config->log = optarg;
-				break;
-			case 'p':
-				/* There is a default assignment, but -p
-				 * still requires a port
-				 */
-				if (!optarg) {
-					fprintf(stderr, "Error: -p requires a port value\n");
-					return -1;
-				}
-
-				user_port = strtol(optarg, &end, 10);
-				if (*end != '\0' || user_port < 0 || user_port > 65535) {
-					fprintf(stderr, "Error: invalid port '%s'\n", optarg);
-					return -1;
-				}
-				config->port = user_port;
-
-				break;
-			/* Unknown, pass */
-			case '?':
-			default:
-				if (isprint(optopt)) {
-					fprintf(stderr, "Error: unknown option '-%c'\n", optopt);
-				}
-				else {
-					fprintf(stderr, "Error: unknown option given\n");
-				}
-
+		case 'c':
+			if ((config->cgi = realpath(optarg, NULL)) == NULL) {
+				warn("failed to get realpath of \"%s\"", optarg);
 				return -1;
+			}
+			if (stat(config->cgi, &st) != 0) {
+				warn("cannot access \"%s\"", config->cgi);
+				return -1;
+			}
+			if (!S_ISDIR(st.st_mode)) {
+				warnx("\"%s\" is not directory", config->cgi);
+				return -1;
+			}
+			break;
+		case 'd':
+			config->debug = true;
+			break;
+		case 'h':
+			config->help = true;
+			break;
+		case 'i':
+			config->address = optarg;
+			break;
+		case 'l':
+			if ((config->log = realpath(optarg, NULL)) == NULL) {
+				warn("failed to get realpath of \"%s\"", optarg);
+				return -1;
+			}
+			if (stat(config->log, &st) != 0) {
+				warn("cannot access \"%s\"", config->log);
+				return -1;
+			}
+			if (!S_ISDIR(st.st_mode)) {
+				warnx("\"%s\" is not directory", config->log);
+				return -1;
+			}
+			break;
+		case 'p':
+			user_port = strtol(optarg, &end, 10);
+			if (*end != '\0' || user_port < 0 || user_port > 65535) {
+				warnx("invalid port \"%s\"", optarg);
+				return -1;
+			}
+			config->port = user_port;
+
+			break;
+		/* getopt prints error messages for us, just exit on unknown. */
+		case '?':
+		default:
+			return -1;
 		}
 	}
 
-	config->docroot = argv[optind];
+	if (config->help) {
+		usage(argv[0]);
+		exit(EXIT_SUCCESS);
+		/* NOTREACHED */
+	}
+	if (optind >= argc) {
+		usage(argv[0]);
+		return -1;
+	}
 
-	/* Check docroot */
+	if ((config->docroot = realpath(argv[optind], NULL)) == NULL) {
+		warn("failed to get realpath of \"%s\"", argv[optind]);
+		return -1;
+	}
 	if (stat(config->docroot, &st) != 0) {
-		fprintf(stderr, "Error: cannot access '%s'\n", config->docroot);
-		perror("stat");
+		warn("cannot access \"%s\"", config->docroot);
 		return -1;
 	}
 	if (!S_ISDIR(st.st_mode)) {
-		fprintf(stderr, "Error: '%s' is not dir\n", config->docroot);
+		warnx("\"%s\" is not directory", config->docroot);
 		return -1;
 	}
 
 	return 0;
 }
 
-int main(int argc, char *argv[]) {
+int
+main(int argc, char *argv[])
+{
 	sws_options config;
 	int sock;
 
-	if(input_validation(argc, argv, &config) < 0){
-		return EXIT_FAILURE;	
-	}
-
-	if(config.help){
-		printf("Usage: %s [-dh] [-c dir] [-i address] [-l file] [-p port] dir\n", argv[0]);
-		return EXIT_SUCCESS;
+	if (input_validation(argc, argv, &config) < 0) {
+		return EXIT_FAILURE;
 	}
 
 	initialize_logging(config.log, config.debug);
 
-	if((sock = create_connections(config.address, config.port)) < 0){
+	if ((sock = create_connections(config.address, config.port)) < 0) {
 		err(EXIT_FAILURE, "Unable to establish a connection");
 	}
 
 	accept_connections(sock, &config);
-
+	free(config.docroot);
+	/* Even if these are NULL, it's fine to free them. */
+	free(config.cgi);
+	free(config.log);
 	(void)close(sock);
-	
+
 	return EXIT_SUCCESS;
 }
