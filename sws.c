@@ -154,16 +154,18 @@ main(int argc, char *argv[])
 
 	if (input_validation(argc, argv, &config) < 0) {
 		return EXIT_FAILURE;
-	}	
+	}
 
 	initialize_logging(config.log, config.debug);
 
 	if ((sock = create_connections(config.address, config.port)) < 0) {
 		err(EXIT_FAILURE, "Unable to establish a connection");
 	}
+
 	if (!config.debug && daemon(0, 0)) {
 		err(EXIT_FAILURE, "daemon");
 	}
+
 	accept_connections(sock, &config);
 	free(config.docroot);
 	/* Even if these are NULL, it's fine to free them. */

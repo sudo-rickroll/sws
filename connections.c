@@ -27,6 +27,7 @@
 #include "handlers.h"
 #include "logger.h"
 #include "types.h"
+#include "util.h"
 
 #define BACKLOG 10
 #define DEFAULT_PORT "8080"
@@ -354,19 +355,16 @@ static void
 handle_connections(int sock, char *docroot, char *ip, char *cgidir,
                    uint16_t port)
 {
-	int rval;
-	int filepath_len;
-
-	char buf[BUFSIZ];
-	char filepath[PATH_MAX];
-	/* Choose 16 because neither version nor request can
-	 * possibly be over this amount */
-	char version[16], request[16], path[PATH_MAX];
+		char buf[BUFSIZ];
+	/* Choose 16 because neither version nor request can possibly be over this amount. Choose PATH_MAX+1 because the sscanf macro stringify trick doesn't allow us to get *exactly* PATH_MAX-1 characters + 1 null terminator. */
+	char version[16], request[16], path[PATH_MAX+1];
 	char canonic_filepath[PATH_MAX];
+	char query_string[PATH_MAX];
 
+	FILE *sock_fp;
+	ssize_t rval;
 	struct stat st;
 	const char *mime_type;
-
 
 	/* Magic! */
 	magic_t magic_cookie = magic_open(MAGIC_MIME_TYPE);
@@ -382,10 +380,12 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir,
 
 	do {
 		bzero(buf, sizeof(buf));
-		bzero(filepath, sizeof(filepath));
+		bzero(canonic_filepath, sizeof(canonic_filepath));
+		bzero(query_string, sizeof(query_string));
+		bzero(path, sizeof(path));
 
 		if ((rval = read(sock, buf, BUFSIZ)) < 0) {
-			perror("Stream read error");
+			warn("Stream read error");
 			break;
 		}
 
@@ -394,7 +394,6 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir,
 		}
 
 		buf[rval] = '\0';
-		(void)printf("Client from %s sent \n%s\n", ip, buf);
 
 		/* If not normal HTTP, send and done */
 		if (!is_http(buf)) {
@@ -402,52 +401,47 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir,
 		}
 
 		/* Validate parts of request */
-		/* sscanf does not allow * sizes so I explicitly write them out for it
-		 */
-		if (sscanf(buf, "%15s %4095s %15s", request, path, version) != 3) {
+		/* https://gcc.gnu.org/onlinedocs/cpp/Stringizing.html */
+#define xstr(s) str(s)
+#define str(s) #s
+		if (sscanf(buf, "%15s %" xstr(PATH_MAX) "s %15s", request, path, version) != 3) {
 			status_print(sock, "HTTP/1.0", request, 400, "Bad Request", NULL,
-			             NULL, ip);
+						 NULL, ip);
 			log_stream(ip, path, 400, 0);
 			break;
 		}
 
 		if (strcmp(version, "HTTP/1.0") != 0 &&
-		    strcmp(version, "HTTP/1.1") != 0) {
+			strcmp(version, "HTTP/1.1") != 0) {
 			perror("strcmp");
 			break;
-		}
+			}
 
 		if (strcmp(request, "GET") != 0 && strcmp(request, "HEAD") != 0) {
 			perror("strcmp");
 			break;
 		}
+		errno = 0;
+		rval = resolve_request_uri(path, docroot, cgidir, canonic_filepath, query_string, sizeof(query_string));
+		if (rval == -1) {
+			status_print(sock, version, request, 500,
+							 "Internal Server Error", NULL, NULL, ip);
+			log_stream(ip, path, 500, 0);
+		} else if (rval == 1) {
+			if (errno == ENOENT) {
+				status_print(sock, version, request, 404, "Not Found", NULL,
+							 NULL, ip);
+				log_stream(ip, path, 404, 0);
+			} else {
+				status_print(sock, version, request, 400, "Bad Request", NULL,
+							 NULL, ip);
+				log_stream(ip, path, 400, 0);
+			}
+		}
 		if (cgidir != NULL && is_cgi(path)) {
-			char cgi_path[PATH_MAX];
-			char *query;
 			char port_cast[PORT_NUMBER_MAX];
-			int cgi_path_length;
 
-			query = strchr(path, '?');
-			if (query != NULL) {
-				/* Add null in place of "?" so that path reads until query
-				 * string and not any longer */
-				*query = '\0';
-				query++;
-			}
-
-			/* 8 for length of /cgi-bin */
-			cgi_path_length =
-				snprintf(cgi_path, sizeof(cgi_path), "%s%s", cgidir, path + 8);
-
-			if (cgi_path_length < 0 ||
-			    (size_t)cgi_path_length >= sizeof(cgi_path)) {
-				status_print(sock, version, request, 414,
-				             "URI Too Long", NULL, NULL, ip);
-				log_stream(ip, path, 414, 0);
-				break;
-			}
-
-			if (stat(cgi_path, &st) != 0) {
+			if (stat(canonic_filepath, &st) != 0) {
 				status_print(sock, version, request, 404, "Not Found", NULL,
 				             NULL, ip);
 				log_stream(ip, path, 404, 0);
@@ -455,7 +449,7 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir,
 			}
 
 			/* Check if regular file and can be executed */
-			if (!S_ISREG(st.st_mode) || access(cgi_path, X_OK) != 0) {
+			if (!S_ISREG(st.st_mode) || access(canonic_filepath, X_OK) != 0) {
 				status_print(sock, version, request, 403, "Forbidden", NULL,
 				             NULL, ip);
 				log_stream(ip, path, 403, 0);
@@ -478,7 +472,7 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir,
 			}
 
 
-			if (cgi_exec(sock, cgi_path, request, version, query, path,
+			if (cgi_exec(sock, canonic_filepath, request, version, query_string, path,
 			             port_cast, ip) < 0) {
 				status_print(sock, version, request, 500,
 				             "Internal Server Error", NULL, NULL, ip);
@@ -497,33 +491,6 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir,
 
 		/* At this point it is a good request. Can serve */
 
-		filepath_len =
-			snprintf(filepath, sizeof(filepath), "%s/%s", docroot, path + 1);
-		if (filepath_len < 0) {
-			perror("snprintf");
-			break;
-		}
-
-		if ((size_t)filepath_len >= sizeof(filepath)) {
-			perror("url size");
-			break;
-		}
-
-		/* Not resolved */
-		if (!realpath(filepath, canonic_filepath)) {
-			perror("realpath filepath");
-			break;
-		}
-
-		/* Traversal prevent by checking for docroot prefix */
-		if (strncmp(canonic_filepath, docroot,
-		            strlen(docroot)) != 0) {
-			status_print(sock, version, request, 403, "Forbidden", NULL, NULL,
-			             ip);
-			log_stream(ip, path, 403, 0);
-			break;
-		}
-
 		if (stat(canonic_filepath, &st) != 0) {
 			perror("stat");
 			break;
@@ -534,11 +501,16 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir,
 
 		/* Has not changed, 304 */
 		if (ims != (time_t)-1 && st.st_mtime <= ims) {
-			dprintf(sock, "%s 304 Not Modified\r\n", version);
-			dprintf(sock, "Date: %s\r\n", get_time(0, FORMAT_HTTP));
-			dprintf(sock, "Server: sws/1.0\r\n");
-			dprintf(sock, "Last-Modified: %s\r\n", get_time(st.st_mtime, FORMAT_HTTP));
-			dprintf(sock, "\r\n");
+			if ((sock_fp = fdopen(sock, "w")) == NULL) {
+				perror("fdopen sock");
+				break;
+			}
+			fprintf(sock_fp, "%s 304 Not Modified\r\n", version);
+			fprintf(sock_fp, "Date: %s\r\n", get_time(0, FORMAT_HTTP));
+			fprintf(sock_fp, "Server: sws/1.0\r\n");
+			fprintf(sock_fp, "Last-Modified: %s\r\n", get_time(st.st_mtime, FORMAT_HTTP));
+			fprintf(sock_fp, "\r\n");
+			fflush(sock_fp);
 
 			log_stream(ip, path, 304, 0);
 
@@ -562,7 +534,7 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir,
 				char filebuf[BUFSIZ];
 				size_t n;
 
-				FILE *fp = fopen(filepath, "r");
+				FILE *fp = fopen(canonic_filepath, "r");
 				if (fp == NULL) {
 					status_print(sock, version, request, 500,
 					             "Internal Server Error", NULL, NULL, ip);
@@ -636,12 +608,18 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir,
 				/* Manually print headers because dir length must be sent
 				 * accurately and status_print cannot handle this along
 				 */
-				dprintf(sock, "%s 200 OK\r\n", version);
-				dprintf(sock, "Date: %s\r\n", get_time(0, FORMAT_HTTP));
-				dprintf(sock, "Server: sws/1.0\r\n");
-				dprintf(sock, "Content-Type: text/html\r\n");
-				dprintf(sock, "Content-Length: %ld\r\n", html_len);
-				dprintf(sock, "\r\n");
+				if ((sock_fp = fdopen(sock, "w")) == NULL) {
+					perror("fdopen sock");
+					break;
+				}
+				fprintf(sock_fp, "%s 200 OK\r\n", version);
+				fprintf(sock_fp, "Date: %s\r\n", get_time(0, FORMAT_HTTP));
+				fprintf(sock_fp, "Server: sws/1.0\r\n");
+				fprintf(sock_fp, "Content-Type: text/html\r\n");
+				fprintf(sock_fp, "Content-Length: %ld\r\n", html_len);
+				fprintf(sock_fp, "\r\n");
+
+				fflush(sock_fp);
 
 				if (strcmp(request, "GET") == 0) {
 					write(sock, html, html_len);
