@@ -3,16 +3,17 @@
 
 #include <sys/types.h>
 
-char *
-get_time(time_t, char *);
+#include <stdbool.h>
 
-void
-initialize_logging(const char *, int);
+#include "types.h"
 
-void
-log_stream(const char *, const char *, int, size_t);
+char *get_time(time_t t, timeformat_t format);
 
-void 
-end_logging();
+void initialize_logging(const char *path, bool debug);
+
+void log_stream(const char *address, const char *request, int status,
+                size_t bytes);
+
+void end_logging(void);
 
 #endif

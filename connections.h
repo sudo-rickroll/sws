@@ -5,10 +5,8 @@
 
 #include "types.h"
 
-int
-create_connections(char *address, uint16_t port);
+int create_connections(char *address, uint16_t port);
 
-void
-accept_connections(int sock, sws_options *config);
+void accept_connections(int sock, sws_options_t *config);
 
 #endif

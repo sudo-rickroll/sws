@@ -14,6 +14,11 @@ typedef struct {
 	/* Port number will be between 1 and 65535 */
 	uint16_t port;
 	char *docroot;
-} sws_options;
+} sws_options_t;
+
+typedef enum {
+	FORMAT_HTTP,
+	FORMAT_ISO8601
+} timeformat_t;
 
 #endif
