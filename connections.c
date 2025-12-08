@@ -529,11 +529,22 @@ accept_connections(int sock, sws_options *config){
 	int fd;
 	socklen_t length;
 	pid_t pid;
+
+	if(signal(SIGINT, handle_term) == SIG_ERR){
+		perror("sigint handler");
+	}
+
+	if(signal(SIGTERM, handle_term) == SIG_ERR){
+		perror("sigterm handler");
+	}
 	
 	if(!config->debug){
 		if(signal(SIGCHLD, handle_sig) == SIG_ERR){
-			perror("signal handler");
+			perror("sigchld handler");
 		}
+	}
+	else{
+		printf("Server is now running in debug mode\n");
 	}
 
 	for(;;){

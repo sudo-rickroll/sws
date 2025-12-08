@@ -1,7 +1,9 @@
 #include <sys/wait.h>
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <strings.h>
+#include <unistd.h>
 
 #include "handlers.h"
 
@@ -16,6 +18,16 @@ handle_sig(int signo){
 		(void)inspect_status(pid, status);
 	}
 	
+}
+
+void
+handle_term(int signo){
+	const char *prompt = "\nReceived signal for shutdown\n";
+	(void)signo;
+
+	write(STDOUT_FILENO, prompt, strlen(prompt));
+
+	_exit(EXIT_SUCCESS);
 }
 
 int 

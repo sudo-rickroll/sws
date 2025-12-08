@@ -10,6 +10,9 @@
 void
 handle_sig(int);
 
+void
+handle_term(int);
+
 int
 block_sig(int, sigset_t *);
 
