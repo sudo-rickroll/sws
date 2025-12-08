@@ -1,9 +1,9 @@
 #include "util.h"
 
-#include <stdlib.h>
 #include <pwd.h>
-#include <string.h>
 #include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
 
 const char *CGI_PATH = "/cgi-bin";
 const char *USER_PATH = "/~";
@@ -61,7 +61,8 @@ resolve_request_uri(char *uri, char *docroot, char *cgi, char *resolved_uri,
 		is_cgi_dir = true;
 		_uri += strlen(CGI_PATH);
 	}
-	/* Else, if it starts with the user directory /~, find that user's home dir. and save for later */
+	/* Else, if it starts with the user directory /~, find that user's home dir.
+	   and save for later */
 	else if (strncmp(_uri, USER_PATH, strlen(USER_PATH)) == 0) {
 		is_user_dir = true;
 		_uri += strlen(USER_PATH);
@@ -72,7 +73,8 @@ resolve_request_uri(char *uri, char *docroot, char *cgi, char *resolved_uri,
 			free(_uri_initial);
 			return 1;
 		}
-		/* Go to after the next slash if there was one, or until the end (or slash?) if there wasn't */
+		/* Go to after the next slash if there was one, or until the end (or
+		 * slash?) if there wasn't */
 		if (tmp != NULL) {
 			_uri = tmp + 1;
 		} else {
@@ -201,5 +203,5 @@ resolve_request_uri(char *uri, char *docroot, char *cgi, char *resolved_uri,
 	/* get the *real* real path? */
 	(void)realpath(full_path, resolved_uri);
 	free(full_path);
-	return resolved_uri ==  NULL ? 1 : 0;
+	return resolved_uri == NULL ? 1 : 0;
 }

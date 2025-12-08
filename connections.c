@@ -4,10 +4,9 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/wait.h>
-
 #include <netinet/in.h>
-#include <arpa/inet.h>
 
+#include <arpa/inet.h>
 #include <err.h>
 #include <errno.h>
 #include <fts.h>
@@ -62,7 +61,7 @@ if_modified_since(const char *buf)
 	int i = 0;
 
 	memset(&gmt, 0, sizeof(gmt));
-	
+
 	if (ims == NULL) {
 		return (time_t)-1;
 	}
@@ -75,7 +74,7 @@ if_modified_since(const char *buf)
 	}
 
 	/* Put given IMS into date buffer */
-	while (*ims != '\0' && i < (int)sizeof(date)-1) {
+	while (*ims != '\0' && i < (int)sizeof(date) - 1) {
 		if (*ims == '\r' || *ims == '\n') {
 			break;
 		}
@@ -224,7 +223,8 @@ status_print(int sock, const char *version, const char *request,
 }
 
 void
-header_print(int sock, const char *version, const char *request){
+header_print(int sock, const char *version, const char *request)
+{
 	char buf[1024];
 	const char *terminator;
 	int len;
@@ -232,16 +232,14 @@ header_print(int sock, const char *version, const char *request){
 	terminator = (strcmp(request, "HEAD") == 0) ? "\r\n" : "";
 
 	len = snprintf(buf, sizeof(buf),
-			"%s 200 OK \r\n"
-			"Date: %s\r\n"
-			"Server: sws/1.0\r\n"
-			"%s",
-			version,
-			get_time(0, FORMAT_HTTP),
-			terminator);
+	               "%s 200 OK \r\n"
+	               "Date: %s\r\n"
+	               "Server: sws/1.0\r\n"
+	               "%s",
+	               version, get_time(0, FORMAT_HTTP), terminator);
 
-	if(len > 0){
-		if(write(sock, buf, len) != len){
+	if (len > 0) {
+		if (write(sock, buf, len) != len) {
 			perror("write headers");
 		}
 	}
@@ -355,9 +353,12 @@ static void
 handle_connections(int sock, char *docroot, char *ip, char *cgidir,
                    uint16_t port)
 {
-		char buf[BUFSIZ];
-	/* Choose 16 because neither version nor request can possibly be over this amount. Choose PATH_MAX+1 because the sscanf macro stringify trick doesn't allow us to get *exactly* PATH_MAX-1 characters + 1 null terminator. */
-	char version[16], request[16], path[PATH_MAX+1];
+	char buf[BUFSIZ];
+	/* Choose 16 because neither version nor request can possibly be over this
+	 * amount. Choose PATH_MAX+1 because the sscanf macro stringify trick
+	 * doesn't allow us to get *exactly* PATH_MAX-1 characters + 1 null
+	 * terminator. */
+	char version[16], request[16], path[PATH_MAX + 1];
 	char canonic_filepath[PATH_MAX];
 	char query_string[PATH_MAX];
 
@@ -404,37 +405,39 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir,
 		/* https://gcc.gnu.org/onlinedocs/cpp/Stringizing.html */
 #define xstr(s) str(s)
 #define str(s) #s
-		if (sscanf(buf, "%15s %" xstr(PATH_MAX) "s %15s", request, path, version) != 3) {
+		if (sscanf(buf, "%15s %" xstr(PATH_MAX) "s %15s", request, path,
+		           version) != 3) {
 			status_print(sock, "HTTP/1.0", request, 400, "Bad Request", NULL,
-						 NULL, ip);
+			             NULL, ip);
 			log_stream(ip, path, 400, 0);
 			break;
 		}
 
 		if (strcmp(version, "HTTP/1.0") != 0 &&
-			strcmp(version, "HTTP/1.1") != 0) {
+		    strcmp(version, "HTTP/1.1") != 0) {
 			perror("strcmp");
 			break;
-			}
+		}
 
 		if (strcmp(request, "GET") != 0 && strcmp(request, "HEAD") != 0) {
 			perror("strcmp");
 			break;
 		}
 		errno = 0;
-		rval = resolve_request_uri(path, docroot, cgidir, canonic_filepath, query_string, sizeof(query_string));
+		rval = resolve_request_uri(path, docroot, cgidir, canonic_filepath,
+		                           query_string, sizeof(query_string));
 		if (rval == -1) {
-			status_print(sock, version, request, 500,
-							 "Internal Server Error", NULL, NULL, ip);
+			status_print(sock, version, request, 500, "Internal Server Error",
+			             NULL, NULL, ip);
 			log_stream(ip, path, 500, 0);
 		} else if (rval == 1) {
 			if (errno == ENOENT) {
 				status_print(sock, version, request, 404, "Not Found", NULL,
-							 NULL, ip);
+				             NULL, ip);
 				log_stream(ip, path, 404, 0);
 			} else {
 				status_print(sock, version, request, 400, "Bad Request", NULL,
-							 NULL, ip);
+				             NULL, ip);
 				log_stream(ip, path, 400, 0);
 			}
 		}
@@ -460,11 +463,12 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir,
 				perror("snprintf cgi port");
 				break;
 			}
-			
-			/* This will break if cgi contains response code. Going by professor's slack response */ 
+
+			/* This will break if cgi contains response code. Going by
+			 * professor's slack response */
 			header_print(sock, version, request);
 
-			if(strcmp(request, "HEAD") == 0){
+			if (strcmp(request, "HEAD") == 0) {
 				char elabReq[BUFSIZ];
 				snprintf(elabReq, sizeof(elabReq), "%s %s", request, version);
 				log_stream(ip, path, 200, 0);
@@ -472,14 +476,14 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir,
 			}
 
 
-			if (cgi_exec(sock, canonic_filepath, request, version, query_string, path,
-			             port_cast, ip) < 0) {
+			if (cgi_exec(sock, canonic_filepath, request, version, query_string,
+			             path, port_cast, ip) < 0) {
 				status_print(sock, version, request, 500,
 				             "Internal Server Error", NULL, NULL, ip);
 				log_stream(ip, path, 500, 0);
 			}
 
-			else{
+			else {
 				char elabReq[BUFSIZ];
 				snprintf(elabReq, sizeof(elabReq), "%s %s", request, version);
 				/* using 0 because I don't know the bytes read from cgi */
@@ -508,7 +512,8 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir,
 			fprintf(sock_fp, "%s 304 Not Modified\r\n", version);
 			fprintf(sock_fp, "Date: %s\r\n", get_time(0, FORMAT_HTTP));
 			fprintf(sock_fp, "Server: sws/1.0\r\n");
-			fprintf(sock_fp, "Last-Modified: %s\r\n", get_time(st.st_mtime, FORMAT_HTTP));
+			fprintf(sock_fp, "Last-Modified: %s\r\n",
+			        get_time(st.st_mtime, FORMAT_HTTP));
 			fprintf(sock_fp, "\r\n");
 			fflush(sock_fp);
 
@@ -644,20 +649,19 @@ accept_connections(int sock, sws_options_t *config)
 	socklen_t length;
 	pid_t pid;
 
-	if(signal(SIGINT, handle_term) == SIG_ERR){
+	if (signal(SIGINT, handle_term) == SIG_ERR) {
 		perror("sigint handler");
 	}
 
-	if(signal(SIGTERM, handle_term) == SIG_ERR){
+	if (signal(SIGTERM, handle_term) == SIG_ERR) {
 		perror("sigterm handler");
 	}
-	
-	if(!config->debug){
-		if(signal(SIGCHLD, handle_sig) == SIG_ERR){
+
+	if (!config->debug) {
+		if (signal(SIGCHLD, handle_sig) == SIG_ERR) {
 			perror("sigchld handler");
 		}
-	}
-	else{
+	} else {
 		printf("Server is now running in debug mode\n");
 	}
 
@@ -671,22 +675,25 @@ accept_connections(int sock, sws_options_t *config)
 		display_client_details(&address, length, client_ip, client_port,
 		                       sizeof(client_ip), sizeof(client_port));
 
-		if(config->debug){
-			handle_connections(fd, config->docroot, client_ip, config->cgi, config->port);
-			(void)printf("Client %s:%s has closed connection.\n\n", client_ip, client_port);
-		}
-		else{
-			if((pid = fork()) < 0){
+		if (config->debug) {
+			handle_connections(fd, config->docroot, client_ip, config->cgi,
+			                   config->port);
+			(void)printf("Client %s:%s has closed connection.\n\n", client_ip,
+			             client_port);
+		} else {
+			if ((pid = fork()) < 0) {
 				perror("fork");
 				close(fd);
 				continue;
 			}
 
 
-			if(pid == 0){
+			if (pid == 0) {
 				(void)close(sock);
-				handle_connections(fd, config->docroot, client_ip, config->cgi, config->port);
-				(void)printf("Client %s:%s has closed connection...\n\n", client_ip, client_port);
+				handle_connections(fd, config->docroot, client_ip, config->cgi,
+				                   config->port);
+				(void)printf("Client %s:%s has closed connection...\n\n",
+				             client_ip, client_port);
 				(void)close(fd);
 				exit(EXIT_SUCCESS);
 			}

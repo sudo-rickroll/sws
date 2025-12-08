@@ -61,22 +61,23 @@ input_validation(int argc, char **argv, sws_options_t *config)
 			break;
 		case 'l':
 			if (stat(optarg, &st) == 0 && S_ISDIR(st.st_mode)) {
-				fprintf(stderr, "Log path \"%s\" cannot be a directory", optarg);
+				fprintf(stderr, "Log path \"%s\" cannot be a directory",
+				        optarg);
 				return -1;
 			}
 
 			last_slash = strrchr(optarg, '/');
-			if(last_slash != NULL){
+			if (last_slash != NULL) {
 				size_t dir_len;
 				char *dir_path;
-			       
-				dir_len	= (size_t)(last_slash - optarg);
 
-				if(dir_len == 0){
+				dir_len = (size_t)(last_slash - optarg);
+
+				if (dir_len == 0) {
 					dir_len = 1;
 				}
 
-				if((dir_path = malloc(dir_len + 1)) == NULL){
+				if ((dir_path = malloc(dir_len + 1)) == NULL) {
 					perror("log dir malloc");
 					return -1;
 				}
@@ -84,12 +85,12 @@ input_validation(int argc, char **argv, sws_options_t *config)
 				strncpy(dir_path, optarg, dir_len);
 				dir_path[dir_len] = '\0';
 
-				if(stat(dir_path, &st) != 0){
+				if (stat(dir_path, &st) != 0) {
 					perror("stat log directory");
 					free(dir_path);
 					return -1;
 				}
-				if(!S_ISDIR(st.st_mode)){
+				if (!S_ISDIR(st.st_mode)) {
 					fprintf(stderr, "\"%s\" is not a directory", dir_path);
 					free(dir_path);
 					return -1;
@@ -97,7 +98,7 @@ input_validation(int argc, char **argv, sws_options_t *config)
 				free(dir_path);
 			}
 
-			if((config->log = strdup(optarg)) == NULL){
+			if ((config->log = strdup(optarg)) == NULL) {
 				perror("dup log");
 				return -1;
 			}
