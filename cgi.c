@@ -1,4 +1,3 @@
-#include <sys/types.h>
 #include <sys/wait.h>
 
 #include <errno.h>
@@ -9,6 +8,7 @@
 #include <unistd.h>
 
 #include "cgi.h"
+#include "handlers.h"
 
 int
 is_cgi(const char *path){
@@ -59,8 +59,15 @@ cgi_init_env(const char *method, const char *version, const char *query, const c
 		perror("setenv address");
 	}
 
-	if((query != NULL && query[0] != '\0' && setenv("QUERY_STRING", query, 1) != 0) || setenv("QUERY_STRING", "", 1) != 0){
-		perror("setenv query");
+	if(query != NULL && query[0] != '\0'){
+		if(setenv("QUERY_STRING", query, 1) != 0){
+			perror("setenv query");
+		}
+	}
+	else{
+	       if(setenv("QUERY_STRING", "", 1) != 0){
+		       perror("setenv query");
+	       }
 	}
 
 	/* Set path for the binaries. I have assumed that it would be present at these locations always, like typical Unix system binaries */
@@ -74,13 +81,28 @@ int
 cgi_exec(int sock, const char *path, const char *method, const char *version, const char *query, const char *script, const char *port, const char *address){
 	pid_t pid;
 	int status;
+	
+	/* I am using signal handler to reap child in the grandparent, so I will have to mask SIGCHLD here. Otherwise, waitpid here will fail. */
+	sigset_t old_mask;
+	
+	if(block_sig(SIGCHLD, &old_mask) < 0){
+		perror("cgi block SIGCHLD");
+		return -1;
+	}
 
+	
 	if((pid = fork()) < 0){
 		perror("cgi fork");
+		if(restore_sig(&old_mask) < 0){
+			perror("cgi restore sigchld");
+		}
 		return -1;
 	}
 
 	if(pid == 0){
+		if(restore_sig(&old_mask) < 0){
+			perror("cgi child SIGCHLD restore");
+		}
 		if(dup2(sock, STDOUT_FILENO) < 0){
 			perror("dup2 stdout");
 			exit(EXIT_FAILURE);
@@ -97,20 +119,17 @@ cgi_exec(int sock, const char *path, const char *method, const char *version, co
 
 	if(waitpid(pid, &status, 0) < 0){
 		perror("waitpid");
+		if(restore_sig(&old_mask) < 0){
+			perror("cgi parent SIGCHLD restore");
+		}
 		return -1;
 	}
 
-	if(WIFEXITED(status) && WEXITSTATUS(status) != 0){
-		(void)fprintf(stderr, "Execution script has exited with status %d\n", WEXITSTATUS(status));
-	       return -1;
+	if(restore_sig(&old_mask) < 0){
+		perror("cgi parent SIGCHLD restore");
 	}
-
-	if(WIFSIGNALED(status)){
-		(void)fprintf(stderr, "Execution script was terminated by signal %d\n", WTERMSIG(status));
-		return -1;
-	}
-
-	return 0;
+	
+	return inspect_status(pid, status);
 }
 
 	       	

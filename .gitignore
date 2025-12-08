@@ -1,3 +1,6 @@
+# Core Dumps
+*.core
+
 # Target
 sws
 
