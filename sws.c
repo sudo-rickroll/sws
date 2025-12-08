@@ -18,7 +18,7 @@ usage(char *program_name)
 }
 
 int
-input_validation(int argc, char **argv, sws_options *config)
+input_validation(int argc, char **argv, sws_options_t *config)
 {
 	int opt;
 	long user_port;
@@ -117,7 +117,7 @@ input_validation(int argc, char **argv, sws_options *config)
 int
 main(int argc, char *argv[])
 {
-	sws_options config;
+	sws_options_t config;
 	int sock;
 
 	if (input_validation(argc, argv, &config) < 0) {
@@ -136,6 +136,7 @@ main(int argc, char *argv[])
 	free(config.cgi);
 	free(config.log);
 	(void)close(sock);
+	end_logging();
 
 	return EXIT_SUCCESS;
 }

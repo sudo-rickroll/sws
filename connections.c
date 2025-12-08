@@ -161,11 +161,11 @@ status_print(int sock, const char *version, const char *request,
 	}
 
 	fprintf(sock_fp, "%s %d %s\r\n", version, status_code, message);
-	fprintf(sock_fp, "Date: %s\r\n", get_time(0, "client"));
+	fprintf(sock_fp, "Date: %s\r\n", get_time(0, FORMAT_HTTP));
 	fprintf(sock_fp, "Server: sws/1.0\r\n");
 	if (st != NULL) {
 		fprintf(sock_fp, "Last-Modified: %s\r\n",
-		        get_time(st->st_mtime, "client"));
+		        get_time(st->st_mtime, FORMAT_HTTP));
 	}
 	if (mime_type != NULL) {
 		fprintf(sock_fp, "Content-Type: %s\r\n", mime_type);
@@ -529,7 +529,7 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir,
 				 * accurately and status_print cannot handle this along
 				 */
 				dprintf(sock, "%s 200 OK\r\n", version);
-				dprintf(sock, "Date: %s\r\n", get_time(-1, "client"));
+				dprintf(sock, "Date: %s\r\n", get_time(-1, FORMAT_HTTP));
 				dprintf(sock, "Server: sws/1.0\r\n");
 				dprintf(sock, "Content-Type: text/html\r\n");
 				dprintf(sock, "Content-Length: %ld\r\n", html_len);
@@ -550,7 +550,7 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir,
 }
 
 void
-accept_connections(int sock, sws_options *config)
+accept_connections(int sock, sws_options_t *config)
 {
 	struct sockaddr_storage address;
 	char client_ip[NI_MAXHOST], client_port[NI_MAXSERV];
