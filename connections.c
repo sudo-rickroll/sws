@@ -3,10 +3,11 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/time.h>
-#include <sys/types.h>
-#include <netinet/in.h>
+#include <sys/wait.h>
 
+#include <netinet/in.h>
 #include <arpa/inet.h>
+
 #include <err.h>
 #include <errno.h>
 #include <fts.h>
@@ -558,8 +559,21 @@ accept_connections(int sock, sws_options_t *config)
 	socklen_t length;
 	pid_t pid;
 
-	if (signal(SIGCHLD, reap_connection) == SIG_ERR) {
-		perror("signal handler");
+	if(signal(SIGINT, handle_term) == SIG_ERR){
+		perror("sigint handler");
+	}
+
+	if(signal(SIGTERM, handle_term) == SIG_ERR){
+		perror("sigterm handler");
+	}
+	
+	if(!config->debug){
+		if(signal(SIGCHLD, handle_sig) == SIG_ERR){
+			perror("sigchld handler");
+		}
+	}
+	else{
+		printf("Server is now running in debug mode\n");
 	}
 
 	for (;;) {
@@ -572,21 +586,27 @@ accept_connections(int sock, sws_options_t *config)
 		display_client_details(&address, length, client_ip, client_port,
 		                       sizeof(client_ip), sizeof(client_port));
 
-		if ((pid = fork()) < 0) {
-			perror("fork");
-			continue;
+		if(config->debug){
+			handle_connections(fd, config->docroot, client_ip, config->cgi, config->port);
+			(void)printf("Client %s:%s has closed connection.\n\n", client_ip, client_port);
 		}
+		else{
+			if((pid = fork()) < 0){
+				perror("fork");
+				close(fd);
+				continue;
+			}
 
 
-		if (pid == 0) {
-			(void)close(sock);
-			handle_connections(fd, config->docroot, client_ip, config->cgi,
-			                   config->port);
-			(void)printf("Client %s has closed connection...\n\n", client_ip);
+			if(pid == 0){
+				(void)close(sock);
+				handle_connections(fd, config->docroot, client_ip, config->cgi, config->port);
+				(void)printf("Client %s:%s has closed connection...\n\n", client_ip, client_port);
+				(void)close(fd);
+				exit(EXIT_SUCCESS);
+			}
+
 			(void)close(fd);
-			exit(EXIT_SUCCESS);
 		}
-
-		(void)close(fd);
 	}
 }

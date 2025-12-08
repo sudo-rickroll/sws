@@ -9,7 +9,10 @@
 #include <signal.h>
 
 void
-reap_connection(int);
+handle_sig(int);
+
+void
+handle_term(int);
 
 int
 block_sig(int, sigset_t *);
@@ -17,6 +20,10 @@ block_sig(int, sigset_t *);
 int
 restore_sig(sigset_t *);
 
-int fts_compare(const FTSENT **, const FTSENT **);
+int
+inspect_status(pid_t, int);
+
+int 
+fts_compare(const FTSENT **, const FTSENT **);
 
 #endif
