@@ -4,6 +4,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/time.h>
+#include <sys/wait.h>
 
 #include <netinet/in.h>
 
@@ -528,9 +529,11 @@ accept_connections(int sock, sws_options *config){
 	int fd;
 	socklen_t length;
 	pid_t pid;
-
-	if(signal(SIGCHLD, handle_sig) == SIG_ERR){
-		perror("signal handler");
+	
+	if(!config->debug){
+		if(signal(SIGCHLD, handle_sig) == SIG_ERR){
+			perror("signal handler");
+		}
 	}
 
 	for(;;){
@@ -542,22 +545,28 @@ accept_connections(int sock, sws_options *config){
 
 		display_client_details(&address, length, client_ip, client_port, sizeof(client_ip), sizeof(client_port));
 
-		if((pid = fork()) < 0){
-			perror("fork");
-			continue;
-		}
-
-
-		if(pid == 0){
-			(void)close(sock);
+		if(config->debug){
 			handle_connections(fd, config->docroot, client_ip, config->cgi, config->port);
-			(void)printf("Client %s:%s has closed connection...\n\n", client_ip, client_port);
-			(void)close(fd);
-			exit(EXIT_SUCCESS);
+			(void)printf("Client %s:%s has closed connection.\n\n", client_ip, client_port);
 		}
+		else{
+			if((pid = fork()) < 0){
+				perror("fork");
+				close(fd);
+				continue;
+			}
 
-		(void)close(fd);
-		
+
+			if(pid == 0){
+				(void)close(sock);
+				handle_connections(fd, config->docroot, client_ip, config->cgi, config->port);
+				(void)printf("Client %s:%s has closed connection...\n\n", client_ip, client_port);
+				(void)close(fd);
+				exit(EXIT_SUCCESS);
+			}
+
+			(void)close(fd);
+		}
 	}
 }
 
