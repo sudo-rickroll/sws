@@ -529,7 +529,7 @@ accept_connections(int sock, sws_options *config){
 	socklen_t length;
 	pid_t pid;
 
-	if(signal(SIGCHLD, reap_connection) == SIG_ERR){
+	if(signal(SIGCHLD, handle_sig) == SIG_ERR){
 		perror("signal handler");
 	}
 
@@ -551,7 +551,7 @@ accept_connections(int sock, sws_options *config){
 		if(pid == 0){
 			(void)close(sock);
 			handle_connections(fd, config->docroot, client_ip, config->cgi, config->port);
-			(void)printf("Client %s has closed connection...\n\n", client_ip);
+			(void)printf("Client %s:%s has closed connection...\n\n", client_ip, client_port);
 			(void)close(fd);
 			exit(EXIT_SUCCESS);
 		}

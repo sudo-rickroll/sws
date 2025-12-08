@@ -1,4 +1,3 @@
-#include <sys/types.h>
 #include <sys/wait.h>
 
 #include <errno.h>
@@ -129,18 +128,8 @@ cgi_exec(int sock, const char *path, const char *method, const char *version, co
 	if(restore_sig(&old_mask) < 0){
 		perror("cgi parent SIGCHLD restore");
 	}
-
-	if(WIFEXITED(status) && WEXITSTATUS(status) != 0){
-		(void)fprintf(stderr, "Execution script has exited with status %d\n", WEXITSTATUS(status));
-	       return -1;
-	}
-
-	if(WIFSIGNALED(status)){
-		(void)fprintf(stderr, "Execution script was terminated by signal %d\n", WTERMSIG(status));
-		return -1;
-	}
 	
-	return 0;
+	return inspect_status(pid, status);
 }
 
 	       	
