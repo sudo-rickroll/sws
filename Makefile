@@ -3,7 +3,7 @@ IFLAGS = `uname -s | grep -q SunOS && echo -I/opt/magic/include -I/opt/magic/lib
 CFLAGS += ${IFLAGS}
 LD_FLAGS = -lmagic
 TARGET_NAME = sws
-OBJECT_FILES = sws.o logger.o connections.o handlers.o cgi.o
+OBJECT_FILES = sws.o logger.o connections.o handlers.o cgi.o util.o
 
 all: ${TARGET_NAME}
 
