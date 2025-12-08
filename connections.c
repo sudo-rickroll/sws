@@ -51,6 +51,47 @@ is_http(const char *buf)
 	return 0;
 }
 
+time_t
+if_modified_since(const char *buf)
+{
+	char *ims = strcasestr(buf, "If-Modified-Since:");
+	struct tm gmt;
+	char date[BUFSIZ];
+	int i = 0;
+
+	memset(&gmt, 0, sizeof(gmt));
+	
+	if (ims == NULL) {
+		return (time_t)-1;
+	}
+
+	ims += strlen("If-Modified-Since:");
+
+	/* Skip nullspace */
+	while (*ims == ' ' || *ims == '\t') {
+		ims++;
+	}
+
+	/* Put given IMS into date buffer */
+	while (*ims != '\0' && i < (int)sizeof(date)-1) {
+		if (*ims == '\r' || *ims == '\n') {
+			break;
+		}
+
+		date[i] = *ims;
+		i++;
+		ims++;
+	}
+	date[i] = '\0';
+
+	/* Parse and check format */
+	if (strptime(date, "%a, %d %b %Y %H:%M:%S GMT", &gmt) == NULL) {
+		return (time_t)-1;
+	}
+
+	return timegm(&gmt);
+}
+
 char *
 index_directory(const char *dir_path, const char *request_path)
 {
@@ -468,6 +509,20 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir,
 
 		if (stat(canonic_filepath, &st) != 0) {
 			perror("stat");
+			break;
+		}
+
+		/* Check for IMS */
+		time_t ims = if_modified_since(buf);
+
+		/* Has not changed, 304 */
+		if (ims != (time_t)-1 && st.st_mtime <= ims) {
+			dprintf(sock, "%s 304 Not Modified\r\n", version);
+			dprintf(sock, "Date: %s\r\n", get_time(0, FORMAT_HTTP));
+			dprintf(sock, "Server: sws/1.0\r\n");
+			dprintf(sock, "Last-Modified: %s\r\n", get_time(st.st_mtime, FORMAT_HTTP));
+			dprintf(sock, "\r\n");
+
 			break;
 		}
 
