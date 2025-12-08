@@ -60,8 +60,15 @@ cgi_init_env(const char *method, const char *version, const char *query, const c
 		perror("setenv address");
 	}
 
-	if((query != NULL && query[0] != '\0' && setenv("QUERY_STRING", query, 1) != 0) || setenv("QUERY_STRING", "", 1) != 0){
-		perror("setenv query");
+	if(query != NULL && query[0] != '\0'){
+		if(setenv("QUERY_STRING", query, 1) != 0){
+			perror("setenv query");
+		}
+	}
+	else{
+	       if(setenv("QUERY_STRING", "", 1) != 0){
+		       perror("setenv query");
+	       }
 	}
 
 	/* Set path for the binaries. I have assumed that it would be present at these locations always, like typical Unix system binaries */

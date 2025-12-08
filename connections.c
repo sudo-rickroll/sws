@@ -257,14 +257,14 @@ create_connections(char *address, uint16_t port){
 }
 
 static void
-display_client_details(struct sockaddr_storage *address, socklen_t length, char *ip, size_t ip_len){
+display_client_details(struct sockaddr_storage *address, socklen_t length, char *ip, char *port, size_t ip_len, size_t port_len){
 
-	if(getnameinfo((struct sockaddr *)address, length, ip, ip_len, NULL, 0, NI_NUMERICHOST)){
+	if(getnameinfo((struct sockaddr *)address, length, ip, ip_len, port, port_len, NI_NUMERICHOST | NI_NUMERICSERV)){
 		(void)snprintf(ip, sizeof(ip), "Unknown");
 		return;
 	}
 
-	(void)printf("Connection request has arrived from: %s\n", ip);
+	(void)printf("Connection request has arrived from: %s:%s\n", ip, port);
 }
 
 static void
@@ -524,7 +524,7 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir, uint16_t por
 void
 accept_connections(int sock, sws_options *config){
 	struct sockaddr_storage address;
-	char client_ip[NI_MAXHOST];
+	char client_ip[NI_MAXHOST], client_port[NI_MAXSERV];
 	int fd;
 	socklen_t length;
 	pid_t pid;
@@ -540,7 +540,7 @@ accept_connections(int sock, sws_options *config){
 			continue;
 		}
 
-		display_client_details(&address, length, client_ip, sizeof(client_ip));
+		display_client_details(&address, length, client_ip, client_port, sizeof(client_ip), sizeof(client_port));
 
 		if((pid = fork()) < 0){
 			perror("fork");
