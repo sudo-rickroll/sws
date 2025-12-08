@@ -156,6 +156,10 @@ main(int argc, char *argv[])
 		return EXIT_FAILURE;
 	}
 
+	if (!config.debug && daemon(0, 0)) {
+		err(EXIT_FAILURE, "daemon");
+	}
+
 	initialize_logging(config.log, config.debug);
 
 	if ((sock = create_connections(config.address, config.port)) < 0) {
