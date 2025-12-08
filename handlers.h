@@ -2,9 +2,18 @@
 
 #define HANDLERS_H
 
-void
-reap_connection(int signo);
+#include <fts.h>
+#include <signal.h>
 
-int fts_compare(const FTSENT **a, const FTSENT **b);
+void
+reap_connection(int);
+
+int
+block_sig(int, sigset_t *);
+
+int
+restore_sig(sigset_t *);
+
+int fts_compare(const FTSENT **, const FTSENT **);
 
 #endif

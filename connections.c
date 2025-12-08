@@ -321,6 +321,7 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir, uint16_t por
 		/* sscanf does not allow * sizes so I explicitly write them out for it */
 		if (sscanf(buf, "%15s %4095s %15s", request, path, version) != 3) {
 			status_print(sock, "HTTP/1.0", request, 400, "Bad Request", NULL, NULL, ip);
+			break;
 		}
 
 		if (strcmp(version, "HTTP/1.0") != 0 && strcmp(version, "HTTP/1.1") != 0) {
@@ -332,13 +333,11 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir, uint16_t por
 			perror("strcmp");
 			break;
 		}
-
 		if(cgidir != NULL && is_cgi(path)){
 			char cgi_path[PATH_MAX];
 			char *query;
 			char port_cast[PORT_NUMBER_MAX];
 			int cgi_path_length;
-
 			query = strchr(path, '?');
 			if (query != NULL){
 				/* Add null in place of "?" so that path reads until query string and not any longer */
