@@ -407,6 +407,7 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir,
 		if (sscanf(buf, "%15s %4095s %15s", request, path, version) != 3) {
 			status_print(sock, "HTTP/1.0", request, 400, "Bad Request", NULL,
 			             NULL, ip);
+			log_stream(ip, path, 400, 0);
 			break;
 		}
 
@@ -441,13 +442,15 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir,
 			if (cgi_path_length < 0 ||
 			    (size_t)cgi_path_length >= sizeof(cgi_path)) {
 				status_print(sock, version, request, 414,
-				             "URI longer than pathmax", NULL, NULL, ip);
+				             "URI Too Long", NULL, NULL, ip);
+				log_stream(ip, path, 414, 0);
 				break;
 			}
 
 			if (stat(cgi_path, &st) != 0) {
 				status_print(sock, version, request, 404, "Not Found", NULL,
 				             NULL, ip);
+				log_stream(ip, path, 404, 0);
 				break;
 			}
 
@@ -455,6 +458,7 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir,
 			if (!S_ISREG(st.st_mode) || access(cgi_path, X_OK) != 0) {
 				status_print(sock, version, request, 403, "Forbidden", NULL,
 				             NULL, ip);
+				log_stream(ip, path, 403, 0);
 				break;
 			}
 
@@ -475,6 +479,7 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir,
 			             port_cast, ip) < 0) {
 				status_print(sock, version, request, 500,
 				             "Internal Server Error", NULL, NULL, ip);
+				log_stream(ip, path, 500, 0);
 			}
 
 			break;
@@ -505,6 +510,7 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir,
 		            strlen(docroot)) != 0) {
 			status_print(sock, version, request, 403, "Forbidden", NULL, NULL,
 			             ip);
+			log_stream(ip, path, 403, 0);
 			break;
 		}
 
@@ -523,6 +529,8 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir,
 			dprintf(sock, "Server: sws/1.0\r\n");
 			dprintf(sock, "Last-Modified: %s\r\n", get_time(st.st_mtime, FORMAT_HTTP));
 			dprintf(sock, "\r\n");
+
+			log_stream(ip, path, 304, 0);
 
 			break;
 		}
@@ -548,6 +556,7 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir,
 				if (fp == NULL) {
 					status_print(sock, version, request, 500,
 					             "Internal Server Error", NULL, NULL, ip);
+					log_stream(ip, path, 500, 0);
 					break;
 				}
 
@@ -591,6 +600,7 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir,
 					if (fp == NULL) {
 						status_print(sock, version, request, 500,
 						             "Internal Server Error", NULL, NULL, ip);
+						log_stream(ip, path, 500, 0);
 						break;
 					}
 
