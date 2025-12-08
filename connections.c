@@ -466,10 +466,13 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir,
 				perror("snprintf cgi port");
 				break;
 			}
-
+			
+			/* This will break if cgi contains response code. Going by professor's slack response */ 
 			header_print(sock, version, request);
 
 			if(strcmp(request, "HEAD") == 0){
+				char elabReq[BUFSIZ];
+				snprintf(elabReq, sizeof(elabReq), "%s %s", request, version);
 				log_stream(ip, path, 200, 0);
 				break;
 			}
@@ -480,6 +483,13 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir,
 				status_print(sock, version, request, 500,
 				             "Internal Server Error", NULL, NULL, ip);
 				log_stream(ip, path, 500, 0);
+			}
+
+			else{
+				char elabReq[BUFSIZ];
+				snprintf(elabReq, sizeof(elabReq), "%s %s", request, version);
+				/* using 0 because I don't know the bytes read from cgi */
+				log_stream(ip, elabReq, 200, 0);
 			}
 
 			break;
