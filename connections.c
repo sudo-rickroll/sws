@@ -180,6 +180,30 @@ status_print(int sock, const char *version, const char *request,
 	free(elabReq);
 }
 
+void
+header_print(int sock, const char *version, const char *request){
+	char buf[1024];
+	const char *terminator;
+	int len;
+
+	terminator = (strcmp(request, "HEAD") == 0) ? "\r\n" : "";
+
+	len = snprintf(buf, sizeof(buf),
+			"%s 200 OK \r\n"
+			"Date: %s\r\n"
+			"Server: sws/1.0\r\n"
+			"%s",
+			version,
+			get_time(0, FORMAT_HTTP),
+			terminator);
+
+	if(len > 0){
+		if(write(sock, buf, len) != len){
+			perror("write headers");
+		}
+	}
+}
+
 int
 create_connections(char *address, uint16_t port)
 {
@@ -360,6 +384,7 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir,
 			char *query;
 			char port_cast[PORT_NUMBER_MAX];
 			int cgi_path_length;
+
 			query = strchr(path, '?');
 			if (query != NULL) {
 				/* Add null in place of "?" so that path reads until query
@@ -394,6 +419,13 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir,
 
 			if (snprintf(port_cast, sizeof(port_cast), "%hu", port) < 0) {
 				perror("snprintf cgi port");
+				break;
+			}
+
+			header_print(sock, version, request);
+
+			if(strcmp(request, "HEAD") == 0){
+				log_stream(ip, path, 200, 0);
 				break;
 			}
 
@@ -530,7 +562,7 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir,
 				 * accurately and status_print cannot handle this along
 				 */
 				dprintf(sock, "%s 200 OK\r\n", version);
-				dprintf(sock, "Date: %s\r\n", get_time(-1, FORMAT_HTTP));
+				dprintf(sock, "Date: %s\r\n", get_time(0, FORMAT_HTTP));
 				dprintf(sock, "Server: sws/1.0\r\n");
 				dprintf(sock, "Content-Type: text/html\r\n");
 				dprintf(sock, "Content-Length: %ld\r\n", html_len);
