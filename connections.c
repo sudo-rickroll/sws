@@ -362,7 +362,6 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir,
 	 * possibly be over this amount */
 	char version[16], request[16], path[PATH_MAX];
 	char canonic_filepath[PATH_MAX];
-	char canonic_docroot[PATH_MAX];
 
 	struct stat st;
 	const char *mime_type;
@@ -501,8 +500,8 @@ handle_connections(int sock, char *docroot, char *ip, char *cgidir,
 		}
 
 		/* Traversal prevent by checking for docroot prefix */
-		if (strncmp(canonic_filepath, canonic_docroot,
-		            strlen(canonic_docroot)) != 0) {
+		if (strncmp(canonic_filepath, docroot,
+		            strlen(docroot)) != 0) {
 			status_print(sock, version, request, 403, "Forbidden", NULL, NULL,
 			             ip);
 			break;
