@@ -6,6 +6,7 @@ Liam Rust, Dimitri Stamoutsos, Rangasai Kumbhashi Raghavendra
 
 Our goal was to create a simple web server as a group in accordance to
 the manual page in https://stevens.netmeister.org/631/sws.1.pdf, while adhering to the specifications in RFC1945 and RFC3875.
+This application has been tested for compatibility on NetBSD 10.1, OmniOS r151044, and Linux 6.17.4-300 distros.
 
 ## Work Split Flow
 
