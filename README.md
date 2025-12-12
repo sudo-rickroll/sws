@@ -25,7 +25,7 @@ further startup improvements.
 Rangasai - Connection Protocols, Logging, CGI, Process Management (except
 daemonization), Debug Mode, Usage Help, Utility functions, Bug fixes.
 
-## Known Issues & Limiations
+## Known Issues & Limitations
 
 Currently, this program takes CGI files with headers related to content
 type and the body itself. It cannot include the Response Status code or
