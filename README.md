@@ -2,10 +2,6 @@
 
 Liam Rust, Dimitri Stamoutsos, Rangasai Kumbhashi Raghavendra
 
-Created 2025-11-12
-
-Submitted 2025-12-08
-
 ## Project
 
 Our goal was to create a simple web server as a group in accordance to
